@@ -9,7 +9,7 @@ echo "📌 Zwiększam numer wersji..."
 ./increment-version.sh
 
 # Pobierz nową wersję
-NEW_VERSION=$(grep -o '"version": "[^"]*"' version.json | grep -o '[0-9.]*')
+NEW_VERSION=$(grep '"version"' version.json | awk -F'"' '{print $4}')
 echo "✨ Nowa wersja: v$NEW_VERSION"
 
 # Dodaj wszystkie zmiany
@@ -35,4 +35,3 @@ echo "✅ GOTOWE! Deployment zakończony"
 echo "📌 Wersja: v$NEW_VERSION"
 echo "🔗 Za chwilę dostępne na: https://mecze-977nsu8l7-szymoooos-projects.vercel.app"
 echo ""
-
