@@ -762,12 +762,38 @@
                     console.log('📦 Odpowiedź:', data3);
                     
                     if (data3.data && Array.isArray(data3.data)) {
-                        console.log(`✅ Znaleziono ${data3.data.length} lig w Twoim planie!`);
+                        console.log(`⚠️ UWAGA: Endpoint zwrócił ${data3.data.length} lig - to WSZYSTKIE ligi w bazie, nie tylko Twoje 50!`);
                         
-                        // DEBUG: Sprawdź strukturę pierwszej ligi
+                        // DEBUG: Sprawdź strukturę kilku lig
                         if (data3.data.length > 0) {
-                            console.log('📊 STRUKTURA PIERWSZEJ LIGI:', data3.data[0]);
-                            console.log('📊 Wszystkie klucze:', Object.keys(data3.data[0]));
+                            console.log('📊 STRUKTURA PIERWSZYCH 5 LIG:');
+                            for (let i = 0; i < Math.min(5, data3.data.length); i++) {
+                                console.log(`   ${i+1}. Liga:`, data3.data[i]);
+                            }
+                            console.log('📊 Wszystkie dostępne klucze:', Object.keys(data3.data[0]));
+                            
+                            // Sprawdź czy jest pole wskazujące na subskrypcję
+                            const firstLeague = data3.data[0];
+                            const possibleFields = ['subscribed', 'accessible', 'in_plan', 'enabled', 'available', 'user_has_access', 'subscription_level'];
+                            console.log('🔍 Szukam pól wskazujących na dostępność w planie użytkownika:');
+                            possibleFields.forEach(field => {
+                                if (field in firstLeague) {
+                                    console.log(`   ✅ Znaleziono pole: ${field} = ${firstLeague[field]}`);
+                                } else {
+                                    console.log(`   ❌ Brak pola: ${field}`);
+                                }
+                            });
+                        }
+                        
+                        // Sprawdź metadata/subscription info
+                        if (data3.metadata) {
+                            console.log('📊 METADATA:', data3.metadata);
+                        }
+                        if (data3.subscription) {
+                            console.log('📊 SUBSCRIPTION INFO:', data3.subscription);
+                        }
+                        if (data3.user) {
+                            console.log('📊 USER INFO:', data3.user);
                         }
                         
                         // Wyświetl w tabeli
@@ -794,21 +820,27 @@
                         table.innerHTML = html;
                         
                         document.getElementById('info').innerHTML = `
-                            ✅ <strong>FootyStats API działa!</strong><br>
-                            Znaleziono <strong>${data3.data.length} lig</strong> w Twoim planie FootyStats<br>
-                            <small style="color:#aaa;">Sprawdź konsolę (F12) dla szczegółów</small>
+                            ⚠️ <strong>FootyStats API działa, ale...</strong><br>
+                            Endpoint <code>/league-list</code> zwraca <strong>${data3.data.length} lig</strong> - to WSZYSTKIE ligi w bazie!<br>
+                            <small style="color:#faa;">Twój plan ma tylko 50 lig - potrzebujemy znaleźć endpoint który zwraca TYLKO Twoje ligi</small><br>
+                            <small style="color:#aaa;">📊 Sprawdź konsolę (F12) - szukam pola które filtruje ligi w planie</small>
                         `;
                     }
                 } catch (e) {
                     console.error('❌ Błąd:', e.message);
                 }
                 
-                // Test 4: Inne możliwe endpointy
-                console.log('\n=== TEST 4: Inne możliwe endpointy ===');
+                // Test 4: Inne możliwe endpointy - szukamy endpoint z TYLKO Twoimi 50 ligami
+                console.log('\n=== TEST 4: Szukam endpointu dla Twoich 50 lig ===');
                 const endpoints = [
                     'https://api.football-data-api.com/leagues',
-                    'https://api.football-data-api.com/league-seasons',
-                    'https://api.football-data-api.com/competitions'
+                    'https://api.football-data-api.com/my-leagues',
+                    'https://api.football-data-api.com/user-leagues',
+                    'https://api.football-data-api.com/subscribed-leagues',
+                    'https://api.football-data-api.com/account-leagues',
+                    'https://api.football-data-api.com/subscription',
+                    'https://api.football-data-api.com/account',
+                    'https://api.football-data-api.com/league-seasons'
                 ];
                 
                 for (const endpoint of endpoints) {
@@ -817,7 +849,12 @@
                     try {
                         const res = await fetch(url);
                         const data = await res.json();
-                        console.log(`   ✅ Status ${res.status}:`, data);
+                        if (res.status === 200 && data.data) {
+                            console.log(`   ✅ Status ${res.status}: Znaleziono ${Array.isArray(data.data) ? data.data.length : '?'} elementów`);
+                            console.log(`   📦 Dane:`, data);
+                        } else {
+                            console.log(`   ⚠️ Status ${res.status}:`, data.message || 'Brak danych');
+                        }
                     } catch (e) {
                         console.log(`   ❌ Błąd: ${e.message}`);
                     }
