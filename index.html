@@ -184,18 +184,41 @@
                 
                 // Próbuj Sportmonks jako główne źródło
                 console.log('🔄 Używam Sportmonks jako głównego źródła...');
-                // USUNĄŁEM INCLUDE - sprawdzamy co zwraca domyślnie
-                const sportmonksUrl = `${PROXY}https://api.sportmonks.com/v3/football/fixtures/date/${dateStr}?api_token=${SPORTMONKS_KEY}`;
-                console.log('📡 Sportmonks URL (BEZ include):', sportmonksUrl);
+                
+                // PRÓBA 1: BEZ PROXY (może CORS działa bezpośrednio)
+                // DODANO: include=league żeby pobrać nazwę ligi
+                const sportmonksUrlDirect = `https://api.sportmonks.com/v3/football/fixtures/date/${dateStr}?api_token=${SPORTMONKS_KEY}&include=league`;
+                console.log('📡 Sportmonks URL (BEZPOŚREDNIO, z league):', sportmonksUrlDirect);
                 console.log('📅 Data szukania:', dateStr);
                 
-                const smRes = await fetch(sportmonksUrl);
-                console.log('📝 Sportmonks Status:', smRes.status);
+                let smRes = await fetch(sportmonksUrlDirect);
+                console.log('📝 Sportmonks Status (direct):', smRes.status);
+                
+                // Jeśli CORS blokuje, spróbuj z proxy
+                if (!smRes.ok && smRes.status === 0) {
+                    console.log('🔄 CORS zablokował - próbuję z proxy...');
+                    const sportmonksUrlProxy = `${PROXY}https://api.sportmonks.com/v3/football/fixtures/date/${dateStr}?api_token=${SPORTMONKS_KEY}&include=league`;
+                    console.log('📡 Sportmonks URL (PROXY, z league):', sportmonksUrlProxy);
+                    smRes = await fetch(sportmonksUrlProxy);
+                    console.log('📝 Sportmonks Status (proxy):', smRes.status);
+                }
+                
                 console.log('📝 Sportmonks Status Text:', smRes.statusText);
                 console.log('📝 Sportmonks Headers:', Array.from(smRes.headers.entries()));
                 
-                // Zawsze czytaj odpowiedź, nawet jeśli błąd
-                const smData = await smRes.json();
+                // Sprawdź content-type przed parsowaniem
+                const contentType = smRes.headers.get('content-type');
+                console.log('📝 Content-Type:', contentType);
+                
+                let smData;
+                if (contentType && contentType.includes('application/json')) {
+                    smData = await smRes.json();
+                } else {
+                    // Odpowiedź nie jest JSON (prawdopodobnie HTML z błędem)
+                    const textResponse = await smRes.text();
+                    console.error('❌ Odpowiedź NIE JEST JSON:', textResponse.substring(0, 200));
+                    throw new Error(`Sportmonks zwróciło ${smRes.status}: ${textResponse.substring(0, 100)}`);
+                }
                 console.log('📦 Sportmonks PEŁNA ODPOWIEDŹ:', JSON.stringify(smData, null, 2));
                 
                 if (smRes.ok) {
@@ -220,13 +243,21 @@
                             const homeName = teams[0]?.trim() || 'Unknown';
                             const awayName = teams[1]?.trim() || 'Unknown';
                             
+                            // Pobierz nazwę ligi z include (jeśli jest)
+                            let leagueName = 'Unknown League';
+                            if (fix.league && fix.league.name) {
+                                leagueName = fix.league.name;
+                            } else if (fix.league_id) {
+                                leagueName = `Liga ID: ${fix.league_id}`;
+                            }
+                            
                             return {
                                 fixture: { id: fix.id },
                                 teams: {
                                     home: { name: homeName },
                                     away: { name: awayName }
                                 },
-                                league: { name: `Liga ID: ${fix.league_id}` }
+                                league: { name: leagueName }
                             };
                         });
                     }
