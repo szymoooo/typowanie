@@ -55,7 +55,7 @@
 </head>
 <body>
     <div class="container">
-        <h1>Corners Predictor v12 <span id="loader" class="loader" style="display:none;"></span></h1>
+        <h1>Corners Predictor <span id="version">v1.01</span> <span id="loader" class="loader" style="display:none;"></span></h1>
         <p class="subtitle">5 źródeł (API-Football OFF) | ≥50% zgoda | TEST MODE</p>
 
         <div class="buttons">
@@ -107,6 +107,21 @@
         let hits = 0, total = 0;
         let chartInstance = null;
         let apiFootballLimitReached = false;
+
+        // Załaduj wersję przy starcie
+        async function loadVersion() {
+            try {
+                const response = await fetch('version.json?t=' + Date.now());
+                const data = await response.json();
+                document.getElementById('version').textContent = 'v' + data.version;
+                console.log('📌 Wersja aplikacji:', data.version, '| Ostatnia aktualizacja:', data.updated);
+            } catch (e) {
+                console.warn('Nie można załadować wersji:', e);
+            }
+        }
+        
+        // Uruchom przy ładowaniu strony
+        loadVersion();
 
         // Funkcja pomocnicza do przetwarzania meczów
         async function processFixtures(fixtures) {
