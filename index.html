@@ -136,7 +136,6 @@
                     const away = fix.teams.away.name;
                     const league = fix.league.name;
                     const id = fix.fixture.id;
-                    const flashscore = `https://www.flashscore.pl/mecz/${home.toLowerCase().replace(/ /g,'-')}-${away.toLowerCase().replace(/ /g,'-')}/${id}/`;
 
                 console.log(`\n🎯 Analizuję: ${home} vs ${away}`);
 
@@ -171,11 +170,10 @@
                             league,
                             avgProb,
                             agree,
-                            flashscore,
                             id,
-                        status: 'Oczekuje',
-                        homeTeam: home,
-                        awayTeam: away,
+                            status: 'Oczekuje',
+                            homeTeam: home,
+                            awayTeam: away,
                             // Dodaj szczegóły predykcji
                             probDetails: {
                                 sportmonks: probDetails.p1,
@@ -1195,10 +1193,10 @@
         function displayResults() {
             const table = document.getElementById('predictions');
             table.style.display = 'table';
-            let html = `<tr><th>Mecz</th><th>Liga</th><th>Średnia %</th><th>ZGODNOŚĆ</th><th>Link</th><th>Status</th></tr>`;
+            let html = `<tr><th>Mecz</th><th>Liga</th><th>Średnia %</th><th>ZGODNOŚĆ</th><th>Status</th></tr>`;
 
             if (predictions.length === 0) {
-                html += `<tr><td colspan="6">Brak meczów spełniających kryteria (zgdn.≥30%, śr.≥55%).</td></tr>`;
+                html += `<tr><td colspan="5">Brak meczów spełniających kryteria (zgdn.≥30%, śr.≥55%).</td></tr>`;
             } else {
                 predictions.forEach(p => {
                     const cls = p.agree >= 80 ? 'high' : p.agree >= 70 ? 'medium' : '';
@@ -1209,7 +1207,6 @@
                         <td>${p.league}</td>
                         <td>${p.avgProb}%</td>
                         <td class="${cls}">${p.agree}%</td>
-                        <td><a href="${p.flashscore}" target="_blank" class="link">Flashscore</a></td>
                         <td class="pending" id="s-${p.id}">${p.status}</td>
                     </tr>`;
                 });
