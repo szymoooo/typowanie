@@ -377,20 +377,64 @@
                 }
                 
                 const teamId = searchData.data[0].id;
+                console.log(`✅ Znaleziono drużynę ${teamName}, ID: ${teamId}`);
                 
-                // Pobierz ostatnie mecze drużyny
-                const historyUrl = `${PROXY}https://api.sportmonks.com/v3/football/fixtures/latest/${teamId}?api_token=${SPORTMONKS_KEY}&include=statistics`;
+                // Pobierz ostatnie mecze drużyny (z pełnymi statystykami!)
+                const historyUrl = `${PROXY}https://api.sportmonks.com/v3/football/fixtures/latest/${teamId}?api_token=${SPORTMONKS_KEY}&include=statistics.type`;
+                console.log(`📡 URL historii: ${historyUrl}`);
+                
                 const historyRes = await fetch(historyUrl);
+                
+                if (!historyRes.ok) {
+                    console.error(`❌ Błąd ${historyRes.status} przy pobieraniu historii`);
+                    return { error: `Błąd API historii (${historyRes.status})` };
+                }
+                
                 const historyData = await historyRes.json();
+                console.log(`📦 Historia dla ${teamName}:`, historyData);
                 
                 if (!historyData.data || historyData.data.length === 0) {
+                    console.warn(`⚠️ Brak meczów w historii dla ${teamName}`);
                     return { error: 'Brak historii meczów' };
                 }
                 
+                console.log(`📊 Znaleziono ${historyData.data.length} meczów w historii`);
+                
                 // Wyciągnij statystyki rożnych z ostatnich 5 meczów
-                const matches = historyData.data.slice(0, 5).map(match => {
+                const matches = historyData.data.slice(0, 5).map((match, index) => {
+                    console.log(`\n📋 Mecz ${index + 1}: ${match.name}`);
+                    console.log(`   ID: ${match.id}, Data: ${match.starting_at}`);
+                    
                     const stats = match.statistics || [];
-                    const corners = stats.find(s => s.type_id === 12 || s.type?.name?.includes('Corner'));
+                    console.log(`   📊 Statystyk: ${stats.length}`);
+                    
+                    if (stats.length > 0) {
+                        // Pokaż pierwsze 3 statystyki jako przykład
+                        console.log(`   🔍 Przykładowe statystyki:`, stats.slice(0, 3));
+                        
+                        // Pokaż wszystkie type_id i nazwy
+                        const types = stats.map(s => ({
+                            type_id: s.type_id,
+                            type_name: s.type?.name || 'N/A',
+                            data: s.data
+                        }));
+                        console.log(`   🏷️ Wszystkie typy:`, types);
+                    }
+                    
+                    // Szukaj rożnych (możliwe warianty)
+                    const corners = stats.find(s => 
+                        s.type_id === 12 || 
+                        s.type_id === 70 ||  // inne możliwe ID
+                        s.type?.name?.toLowerCase().includes('corner') ||
+                        s.type?.name?.toLowerCase().includes('rożn')
+                    );
+                    
+                    if (corners) {
+                        console.log(`   ✅ Znaleziono rożne:`, corners);
+                    } else {
+                        console.warn(`   ⚠️ NIE znaleziono statystyk rożnych!`);
+                    }
+                    
                     return {
                         opponent: match.name,
                         date: match.starting_at,
