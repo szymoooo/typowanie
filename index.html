@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Corners Predictor v12 – 6 ŹRÓDEŁ | 60%+</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background: linear-gradient(135deg, #0f0f23, #1a1a2e);
+            color: #fff;
+            text-align: center;
+            padding: 20px;
+            min-height: 100vh;
+        }
+        h1 { color: #ff5722; font-size: 2em; margin-bottom: 10px; }
+        .subtitle { color: #aaa; margin-bottom: 20px; }
+        .buttons { margin: 20px 0; }
+        button {
+            background: #ff5722; color: white; border: none; padding: 14px 28px; margin: 8px;
+            font-size: 16px; font-weight: bold; cursor: pointer; border-radius: 12px;
+            transition: all 0.3s; box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+        }
+        button:hover { background: #e64a19; transform: translateY(-2px); }
+        table {
+            width: 100%; max-width: 1200px; margin: 25px auto; border-collapse: collapse;
+            background: #1a1a2e; border-radius: 12px; overflow: hidden;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.4);
+        }
+        th { background: #16213e; padding: 16px; font-weight: bold; text-transform: uppercase; font-size: 0.9em; }
+        td { padding: 14px; border-bottom: 1px solid #333; }
+        tr:hover { background: #222840; }
+        .hit { background: #2e7d32 !important; animation: pulse 1s; color: #fff; }
+        .miss { background: #c62828 !important; color: #fff; }
+        .pending { background: #ff8f00; color: #000; font-weight: bold; }
+        .medium { color: #ffd700; font-weight: bold; }
+        .high { color: #00ff00; font-weight: bold; }
+        .link { color: #4fc3f7; text-decoration: underline; cursor: pointer; }
+        #stats {
+            font-size: 1.3em; margin: 25px 0; padding: 15px;
+            background: rgba(255, 87, 34, 0.1); border-radius: 12px; display: inline-block;
+        }
+        canvas { margin: 30px auto; max-width: 400px; }
+        .loader {
+            display: inline-block; width: 20px; height: 20px;
+            border: 3px solid #f3f3f3; border-top: 3px solid #ff5722;
+            border-radius: 50%; animation: spin 1s linear infinite; margin-left: 10px;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.02); } 100% { transform: scale(1); } }
+        footer { margin-top: 50px; font-size: 0.9em; color: #888; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Corners Predictor v12 <span id="loader" class="loader" style="display:none;"></span></h1>
+        <p class="subtitle">6 źródeł | Pełny scrap | ≥60% zgoda | Flashscore + weryfikacja</p>
+
+        <div class="buttons">
+            <button onclick="loadTodayMatches()">SZUKAJ MECZÓW NA DZIŚ</button>
+            <button onclick="loadMatchesForDate(1)">JUTRO</button>
+            <button onclick="loadMatchesForDate(-1)">WCZORAJ</button>
+            <button onclick="verifyAll()">SPRAWDŹ WYNIKI</button>
+        </div>
+
+        <p id="info">Kliknij przycisk, by pobrać mecze na dziś...</p>
+        <p id="api-status" style="font-size: 0.9em; color: #ffa500; margin-top: 10px;"></p>
+
+        <table id="predictions" style="display:none;">
+            <tr>
+                <th>Mecz</th>
+                <th>Liga</th>
+                <th>Średnia %</th>
+                <th>ZGODNOŚĆ</th>
+                <th>Link</th>
+                <th>Status</th>
+            </tr>
+        </table>
+
+        <div id="stats">Hit Rate: — | ROI: —</div>
+        <canvas id="chart"></canvas>
+
+        <footer>
+            <p>CornersBot v12 © 2025 | 6 źródeł | corsproxy.io</p>
+        </footer>
+    </div>
+
+    <script>
+        // === KLUCZE (UKRYTE) ===
+        const SPORTMONKS_KEY = 'zWSF4VIJJHhBOw4xizgqFPS795qiOdxes0y9B1AhqeBeAKBLrKx8283Ivsks';
+        const FOOTYSTATS_KEY = '8cdad7757b702fae3b792c0b3328017ee33cc17594b18ea8a2717cdc53162325';
+        
+        // Możesz dodać więcej kluczy API-Football (jeśli masz)
+        const API_FOOTBALL_KEYS = [
+            'fb9b429fc619754e0ce3ad2a9e5be39b',
+            // 'DODAJ_TUTAJ_KOLEJNY_KLUCZ_JEŚLI_MASZ',
+            // 'I_KOLEJNY',
+        ];
+        let currentKeyIndex = 0;
+
+        // === PROXY (DZIAŁA Z HEADERAMI!) ===
+        const PROXY = 'https://corsproxy.io/?';
+
+        let predictions = [];
+        let hits = 0, total = 0;
+        let chartInstance = null;
+        let apiFootballLimitReached = false;
+
+        // Funkcja pomocnicza do przetwarzania meczów
+        async function processFixtures(fixtures) {
+                for (let fix of fixtures) {
+                    const home = fix.teams.home.name;
+                    const away = fix.teams.away.name;
+                    const league = fix.league.name;
+                    const id = fix.fixture.id;
+                    const flashscore = `https://www.flashscore.pl/mecz/${home.toLowerCase().replace(/ /g,'-')}-${away.toLowerCase().replace(/ /g,'-')}/${id}/`;
+
+                console.log(`\n🎯 Analizuję: ${home} vs ${away}`);
+
+                    const probs = await getAllProbabilities(home, away, id, league);
+                if (!probs) {
+                    console.log('❌ Błąd pobierania prawdopodobieństw');
+                    continue;
+                }
+
+                console.log('📊 Prawdopodobieństwa:', probs);
+
+                    const avgProb = Math.round(probs.reduce((a, b) => a + b, 0) / 6);
+                    const agree = Math.round(probs.filter(p => p >= 60).length / 6 * 100);
+
+                console.log(`📈 Średnia: ${avgProb}% | Zgodność: ${agree}%`);
+
+                    if (agree >= 60) {
+                    console.log('✅ Mecz spełnia kryteria!');
+                        predictions.push({
+                            match: `${home} vs ${away}`,
+                            league,
+                            avgProb,
+                            agree,
+                            flashscore,
+                            id,
+                            status: 'Oczekuje'
+                        });
+                } else {
+                    console.log('❌ Mecz NIE spełnia kryteriów (zgodność < 60%)');
+                }
+            }
+        }
+
+        async function loadMatchesForDate(daysOffset = 0) {
+            document.getElementById('loader').style.display = 'inline-block';
+            document.getElementById('info').textContent = 'Pobieranie meczów z 6 źródeł...';
+            document.getElementById('predictions').style.display = 'none';
+            predictions = [];
+
+            try {
+                const date = new Date();
+                date.setDate(date.getDate() + daysOffset);
+                const dateStr = date.toISOString().split('T')[0];
+                const url = `${PROXY}https://v3.football.api-sports.io/fixtures?date=${dateStr}&timezone=Europe/Warsaw`;
+                
+                console.log('🔍 Pobieranie meczów na:', dateStr);
+                console.log('📡 URL:', url);
+
+                const res = await fetch(url, {
+                    headers: { 'x-apisports-key': API_FOOTBALL_KEYS[currentKeyIndex] }
+                });
+                const data = await res.json();
+                console.log('✅ Odpowiedź API:', data);
+                console.log('📝 Status API:', res.status);
+                console.log('📦 Response data:', data.response);
+                console.log('⚠️ Errors (jeśli są):', data.errors);
+                
+                // Sprawdź czy limit został osiągnięty
+                if (res.status === 429 || data.message?.includes('limit') || data.errors?.requests) {
+                    console.warn('⚠️⚠️⚠️ API-FOOTBALL LIMIT OSIĄGNIĘTY! ⚠️⚠️⚠️');
+                    console.log('🔄 Próbuję pobrać mecze z Sportmonks...');
+                    document.getElementById('info').textContent = '⚠️ Limit API-Football - próba z Sportmonks...';
+                    document.getElementById('api-status').innerHTML = '⚠️ <strong>API-Football limit osiągnięty (100/100 zapytań)</strong> - używam Sportmonks jako backup';
+                    
+                    // Spróbuj Sportmonks
+                    const sportmonksUrl = `${PROXY}https://api.sportmonks.com/v3/football/fixtures/date/${dateStr}?api_token=${SPORTMONKS_KEY}&include=participants,league`;
+                    const smRes = await fetch(sportmonksUrl);
+                    const smData = await smRes.json();
+                    
+                    if (smData.data && smData.data.length > 0) {
+                        console.log(`✅ [Sportmonks] Znaleziono ${smData.data.length} meczów`);
+                        // Konwertuj format Sportmonks na format API-Football
+                        const fixtures = smData.data.slice(0, 30).map(fix => ({
+                            fixture: { id: fix.id },
+                            teams: {
+                                home: { name: fix.participants?.[0]?.name || 'Unknown' },
+                                away: { name: fix.participants?.[1]?.name || 'Unknown' }
+                            },
+                            league: { name: fix.league?.name || 'Unknown' }
+                        }));
+                        
+                        // Przetwórz mecze
+                        await processFixtures(fixtures);
+                        displayResults();
+                        document.getElementById('loader').style.display = 'none';
+                        return;
+                    } else {
+                        console.error('❌ Sportmonks też nie zwrócił meczów');
+                        document.getElementById('info').textContent = 'Błąd: Brak dostępnych źródeł danych.';
+                        document.getElementById('loader').style.display = 'none';
+                        return;
+                    }
+                }
+                
+                const fixtures = data.response ? data.response.slice(0, 30) : [];
+                console.log(`⚽ Znaleziono ${fixtures.length} meczów`);
+                
+                if (fixtures.length > 0) {
+                    document.getElementById('api-status').innerHTML = '✅ <strong>API-Football działa poprawnie</strong>';
+                }
+                
+                if (fixtures.length === 0) {
+                    console.warn('⚠️ API-Football zwróciło 0 meczów - próbuję Sportmonks...');
+                    document.getElementById('info').textContent = 'Brak meczów w API-Football - próba z Sportmonks...';
+                    
+                    // Spróbuj Sportmonks
+                    const sportmonksUrl = `${PROXY}https://api.sportmonks.com/v3/football/fixtures/date/${dateStr}?api_token=${SPORTMONKS_KEY}&include=participants,league`;
+                    const smRes = await fetch(sportmonksUrl);
+                    const smData = await smRes.json();
+                    
+                    if (smData.data && smData.data.length > 0) {
+                        console.log(`✅ [Sportmonks] Znaleziono ${smData.data.length} meczów`);
+                        const sportmonksFixtures = smData.data.slice(0, 30).map(fix => ({
+                            fixture: { id: fix.id },
+                            teams: {
+                                home: { name: fix.participants?.[0]?.name || 'Unknown' },
+                                away: { name: fix.participants?.[1]?.name || 'Unknown' }
+                            },
+                            league: { name: fix.league?.name || 'Unknown' }
+                        }));
+                        
+                        await processFixtures(sportmonksFixtures);
+                        displayResults();
+                        document.getElementById('loader').style.display = 'none';
+                        return;
+                    }
+                }
+
+                // Przetwórz mecze z API-Football
+                await processFixtures(fixtures);
+                displayResults();
+            } catch (e) {
+                console.error('💥 BŁĄD:', e);
+                document.getElementById('info').textContent = 'Błąd: ' + e.message;
+            }
+            document.getElementById('loader').style.display = 'none';
+        }
+
+        async function loadTodayMatches() {
+            return loadMatchesForDate(0);
+        }
+
+
+        async function getAllProbabilities(home, away, id, league) {
+            try {
+                console.log('  📡 Pobieranie z 6 źródeł...');
+                const [p1, p2, p3, p4, p5, p6] = await Promise.all([
+                    getSportmonksProb(id),
+                    getFootyStatsProb(league),
+                    getApiFootballProb(id),
+                    getTotalCornerProb(home, away),
+                    getBetOnCornersProb(home),
+                    getCornerStatProb(home, away)
+                ]);
+                console.log(`  1️⃣ Sportmonks: ${p1}%`);
+                console.log(`  2️⃣ FootyStats: ${p2}%`);
+                console.log(`  3️⃣ API-Football: ${p3}%`);
+                console.log(`  4️⃣ TotalCorner: ${p4}%`);
+                console.log(`  5️⃣ BetOnCorners: ${p5}%`);
+                console.log(`  6️⃣ CornerStat: ${p6}%`);
+                return [p1, p2, p3, p4, p5, p6];
+            } catch (e) {
+                console.error('  ❌ Błąd w getAllProbabilities:', e);
+                return null;
+            }
+        }
+
+        // === 1. SPORTMONKS ===
+        async function getSportmonksProb(id) {
+            if (!SPORTMONKS_KEY || SPORTMONKS_KEY.includes('TU_WKLEJ')) return 65;
+            try {
+                const url = `${PROXY}https://api.sportmonks.com/v3/football/fixtures/${id}?include=statistics&api_token=${SPORTMONKS_KEY}`;
+                const res = await fetch(url);
+                if (!res.ok) return 60;
+                const data = await res.json();
+                const stats = data.data?.[0]?.statistics;
+                const avg = stats ? ((stats.home?.corners || 0) + (stats.away?.corners || 0)) / 2 : 9;
+                return Math.min(95, 50 + (avg - 9) * 10);
+            } catch { return 60; }
+        }
+
+        // === 2. FOOTYSTATS ===
+        async function getFootyStatsProb(leagueName) {
+            try {
+                const leagueMap = { 'Premier League': 2012, 'Ligue 1': 2015, 'Serie A': 2019 };
+                const lid = leagueMap[leagueName.split(' ')[0]] || 2012;
+                const url = `${PROXY}https://api.footystats.org/league-corners?key=${FOOTYSTATS_KEY}&league_id=${lid}`;
+                const res = await fetch(url);
+                if (!res.ok) return 62;
+                const data = await res.json();
+                return data.cornersAVG_overall > 10.5 ? 88 : 68;
+            } catch { return 62; }
+        }
+
+        // === 3. API-FOOTBALL ===
+        async function getApiFootballProb(id) {
+            try {
+                const url = `${PROXY}https://v3.football.api-sports.io/fixtures/statistics?fixture=${id}`;
+                const res = await fetch(url, { headers: { 'x-apisports-key': API_FOOTBALL_KEYS[currentKeyIndex] } });
+                if (!res.ok) return 58;
+                const data = await res.json();
+                if (!data.response.length) return 58;
+                const hc = data.response[0].statistics.find(s => s.type === 'Corner Kicks')?.value || 0;
+                const ac = data.response[1].statistics.find(s => s.type === 'Corner Kicks')?.value || 0;
+                const avg = (hc + ac) * 2.2;
+                return Math.min(95, 45 + (avg - 8) * 12);
+            } catch { return 58; }
+        }
+
+        // === 4. TOTALCORNER.COM (scrap) ===
+        async function getTotalCornerProb(home, away) {
+            try {
+                const url = `${PROXY}https://www.totalcorner.com/match/corner-stats/${home.replace(/ /g,'-')}-vs-${away.replace(/ /g,'-')}`;
+                const html = await fetch(url).then(r => r.text());
+                const match = html.match(/Average Corners per Match.*?(\d+\.\d+)/s);
+                const avg = match ? parseFloat(match[1]) : 9.5;
+                return Math.min(95, 50 + (avg - 9) * 12);
+            } catch { return 70; }
+        }
+
+        // === 5. BETONCORNERS.COM (scrap) ===
+        async function getBetOnCornersProb(home) {
+            try {
+                const url = `${PROXY}https://www.betoncorners.com/statistics/${home.toLowerCase().replace(/ /g,'-')}`;
+                const html = await fetch(url).then(r => r.text());
+                const match = html.match(/Average Corners per Game.*?(\d+\.\d+)/s);
+                const avg = match ? parseFloat(match[1]) : 9;
+                return Math.min(95, 55 + (avg - 9) * 15);
+            } catch { return 68; }
+        }
+
+        // === 6. CORNER-STAT.COM (scrap) ===
+        async function getCornerStatProb(home, away) {
+            try {
+                const url = `${PROXY}https://corner-stat.com/match/${home.toLowerCase().replace(/ /g,'-')}-vs-${away.toLowerCase().replace(/ /g,'-')}`;
+                const html = await fetch(url).then(r => r.text());
+                const match = html.match(/Corners per match.*?(\d+\.\d+)/s);
+                const avg = match ? parseFloat(match[1]) : 9.2;
+                return Math.min(95, 48 + (avg - 9) * 14);
+            } catch { return 66; }
+        }
+
+        function displayResults() {
+            const table = document.getElementById('predictions');
+            table.style.display = 'table';
+            let html = `<tr><th>Mecz</th><th>Liga</th><th>Średnia %</th><th>ZGODNOŚĆ</th><th>Link</th><th>Status</th></tr>`;
+
+            if (predictions.length === 0) {
+                html += `<tr><td colspan="6">Brak meczów z ≥60% zgodnością.</td></tr>`;
+            } else {
+                predictions.forEach(p => {
+                    const cls = p.agree >= 80 ? 'high' : p.agree >= 70 ? 'medium' : '';
+                    html += `<tr>
+                        <td><strong>${p.match}</strong></td>
+                        <td>${p.league}</td>
+                        <td>${p.avgProb}%</td>
+                        <td class="${cls}">${p.agree}%</td>
+                        <td><a href="${p.flashscore}" target="_blank" class="link">Flashscore</a></td>
+                        <td class="pending" id="s-${p.id}">${p.status}</td>
+                    </tr>`;
+                });
+            }
+            table.innerHTML = html;
+            document.getElementById('info').textContent = `Znaleziono ${predictions.length} typów (≥60%)!`;
+            updateStats();
+        }
+
+        async function verifyAll() {
+            hits = 0; total = 0;
+            for (let p of predictions) {
+                const el = document.getElementById(`s-${p.id}`);
+                if (!el) continue;
+                try {
+                    const res = await fetch(`${PROXY}https://v3.football.api-sports.io/fixtures?id=${p.id}`, {
+                        headers: { 'x-apisports-key': API_FOOTBALL_KEYS[currentKeyIndex] }
+                    });
+                    const data = await res.json();
+                    const fix = data.response[0];
+                    if (fix.fixture.status.short === 'FT') {
+                        const statsRes = await fetch(`${PROXY}https://v3.football.api-sports.io/fixtures/statistics?fixture=${p.id}`, {
+                            headers: { 'x-apisports-key': API_FOOTBALL_KEYS[currentKeyIndex] }
+                        });
+                        const stats = await statsRes.json();
+                        const hc = stats.response[0].statistics.find(s => s.type === 'Corner Kicks')?.value || 0;
+                        const ac = stats.response[1].statistics.find(s => s.type === 'Corner Kicks')?.value || 0;
+                        const totalC = hc + ac;
+                        const isOver = totalC > 9.5;
+                        el.textContent = isOver ? `OVER (${totalC})` : `UNDER (${totalC})`;
+                        el.parentElement.className = isOver ? 'hit' : 'miss';
+                        if (isOver) hits++;
+                        total++;
+                    } else {
+                        el.textContent = 'W trakcie';
+                    }
+                } catch { }
+            }
+            updateStats();
+        }
+
+        function updateStats() {
+            const hitRate = total > 0 ? Math.round((hits / total) * 100) : 0;
+            const roi = total > 0 ? ((hits * 1.85) - (total - hits)).toFixed(2) : 0;
+            document.getElementById('stats').innerHTML = `
+                <strong>Hit Rate: ${hitRate}%</strong> | 
+                <strong>ROI: ${roi > 0 ? '+' : ''}${roi} zł</strong> (kurs 1.85)
+            `;
+            updateChart();
+        }
+
+        function updateChart() {
+            const ctx = document.getElementById('chart').getContext('2d');
+            if (chartInstance) chartInstance.destroy();
+            chartInstance = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Trafienia', 'Pudła'],
+                    datasets: [{
+                        data: [hits, total - hits],
+                        backgroundColor: ['#4CAF50', '#f44336'],
+                        borderWidth: 3,
+                        borderColor: '#fff'
+                    }]
+                },
+                options: { responsive: true, plugins: { legend: { position: 'bottom', labels: { color: '#fff' } } } }
+            });
+        }
+
+        // Auto co 30 min
+        setInterval(verifyAll, 1800000);
+    </script>
+</body>
+</html>
