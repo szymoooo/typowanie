@@ -788,9 +788,8 @@
             }
             
             console.log('📡 Pobieranie listy lig z FootyStats...');
-            // Próbuj zarówno league-list jak i competition-list (różne endpointy mogą używać różnych ID)
+            // Używamy endpoint /league-list (endpoint /competition-list nie istnieje w API)
             const url1 = `${PROXY}https://api.football-data-api.com/league-list?key=${FOOTYSTATS_KEY}`;
-            const url2 = `${PROXY}https://api.football-data-api.com/competition-list?key=${FOOTYSTATS_KEY}`;
             
             footyStatsLeagues = {};
             
@@ -875,45 +874,10 @@
                 console.warn('   Używam tylko API po ID dla poszczególnych lig');
             }
             
-            // KROK 2: Pobierz z competition-list (jeśli istnieje) i dodaj do mapy
-            try {
-                const res2 = await fetch(url2);
-                
-                // Sprawdź status i contentType przed parsowaniem
-                if (!res2.ok) {
-                    console.warn(`⚠️ /competition-list zwróciło status ${res2.status}`);
-                    throw new Error(`HTTP ${res2.status}`);
-                }
-                
-                const contentType2 = res2.headers.get('content-type');
-                if (!contentType2 || !contentType2.includes('application/json')) {
-                    const textResponse = await res2.text();
-                    console.warn('⚠️ Odpowiedź /competition-list nie jest JSON:', textResponse.substring(0, 100));
-                    throw new Error('Odpowiedź nie jest JSON');
-                }
-                
-                const data2 = await res2.json();
-                
-                console.log('📦 Odpowiedź /competition-list (ilość lig w odpowiedzi):', data2.data?.length || 0);
-                
-                if (data2.data && Array.isArray(data2.data)) {
-                    let addedCount = 0;
-                    data2.data.forEach((competition) => {
-                        const compId = competition.id || competition.competition_id;
-                        const compName = competition.name || competition.competition_name || 'Unknown';
-                        const countryName = competition.country || '';
-                        const fullName = countryName ? `${compName} (${countryName})` : compName;
-                        
-                        if (compId && !footyStatsLeagues[compId]) {
-                            footyStatsLeagues[compId] = fullName;
-                            addedCount++;
-                        }
-                    });
-                    console.log(`✅ Dodano ${addedCount} lig z /competition-list`);
-                }
-            } catch (e) {
-                console.warn('⚠️ Endpoint /competition-list nie istnieje lub błąd:', e.message);
-            }
+            // KROK 2: Pobierz z competition-list (jeśli istnieje) - endpoint opcjonalny, nie jest wymagany
+            // UWAGA: Endpoint /competition-list nie istnieje w API FootyStats (zwraca 404), 
+            // więc pomijamy go - /league-list wystarczy
+            // Kod pozostawiony na wypadek gdyby endpoint został dodany w przyszłości
             
             console.log(`✅ RAZEM załadowano ${Object.keys(footyStatsLeagues).length} lig FootyStats do mapy`);
             console.log('📊 Przykładowe ligi (pierwsze 10):', Object.entries(footyStatsLeagues).slice(0, 10));
