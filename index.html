@@ -56,7 +56,7 @@
 <body>
     <div class="container">
         <h1>Corners Predictor v12 <span id="loader" class="loader" style="display:none;"></span></h1>
-        <p class="subtitle">6 źródeł | Pełny scrap | ≥60% zgoda | Flashscore + weryfikacja</p>
+        <p class="subtitle">6 źródeł | Pełny scrap | ≥50% zgoda | Flashscore + weryfikacja</p>
 
         <div class="buttons">
             <button onclick="loadTodayMatches()">SZUKAJ MECZÓW NA DZIŚ</button>
@@ -132,8 +132,8 @@
 
                 console.log(`📈 Średnia: ${avgProb}% | Zgodność: ${agree}%`);
 
-                    if (agree >= 60) {
-                    console.log('✅ Mecz spełnia kryteria!');
+                    if (agree >= 50) {
+                    console.log('✅ Mecz spełnia kryteria (≥50%)!');
                         predictions.push({
                             match: `${home} vs ${away}`,
                             league,
@@ -144,7 +144,7 @@
                             status: 'Oczekuje'
                         });
                 } else {
-                    console.log('❌ Mecz NIE spełnia kryteriów (zgodność < 60%)');
+                    console.log('❌ Mecz NIE spełnia kryteriów (zgodność < 50%)');
                 }
             }
         }
@@ -364,7 +364,7 @@
             let html = `<tr><th>Mecz</th><th>Liga</th><th>Średnia %</th><th>ZGODNOŚĆ</th><th>Link</th><th>Status</th></tr>`;
 
             if (predictions.length === 0) {
-                html += `<tr><td colspan="6">Brak meczów z ≥60% zgodnością.</td></tr>`;
+                html += `<tr><td colspan="6">Brak meczów z ≥50% zgodnością.</td></tr>`;
             } else {
                 predictions.forEach(p => {
                     const cls = p.agree >= 80 ? 'high' : p.agree >= 70 ? 'medium' : '';
@@ -379,7 +379,7 @@
                 });
             }
             table.innerHTML = html;
-            document.getElementById('info').textContent = `Znaleziono ${predictions.length} typów (≥60%)!`;
+            document.getElementById('info').textContent = `Znaleziono ${predictions.length} typów (≥50%)!`;
             updateStats();
         }
 
