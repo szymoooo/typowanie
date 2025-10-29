@@ -763,20 +763,39 @@
                 const res1 = await fetch(url1);
                 const data1 = await res1.json();
                 
+                console.log('📦 Odpowiedź /league-list (pełna struktura):', data1);
                 console.log('📦 Odpowiedź /league-list (ilość lig w odpowiedzi):', data1.data?.length || 0);
                 
+                // Sprawdź różne możliwe struktury odpowiedzi
+                let leaguesArray = null;
                 if (data1.data && Array.isArray(data1.data)) {
-                    data1.data.forEach((league, index) => {
-                        const leagueId = league.id;
-                        const leagueName = league.name || 'Unknown';
-                        const countryName = league.country || '';
+                    leaguesArray = data1.data;
+                } else if (Array.isArray(data1)) {
+                    leaguesArray = data1;
+                } else if (data1.success && data1.data && Array.isArray(data1.data)) {
+                    leaguesArray = data1.data;
+                }
+                
+                if (leaguesArray && leaguesArray.length > 0) {
+                    console.log('🔍 Przykładowa liga (pierwsza):', leaguesArray[0]);
+                    console.log('🔍 Klucze pierwszej ligi:', Object.keys(leaguesArray[0]));
+                    
+                    leaguesArray.forEach((league, index) => {
+                        // Spróbuj różne możliwe pola dla ID
+                        const leagueId = league.id || league.league_id || league.competition_id;
+                        const leagueName = league.name || league.league_name || league.competition_name || 'Unknown';
+                        const countryName = league.country || league.country_name || '';
                         const fullName = countryName ? `${leagueName} (${countryName})` : leagueName;
                         
                         if (leagueId) {
                             footyStatsLeagues[leagueId] = fullName;
+                        } else {
+                            console.warn(`⚠️ Liga bez ID (index ${index}):`, league);
                         }
                     });
                     console.log(`✅ Załadowano ${Object.keys(footyStatsLeagues).length} lig z /league-list`);
+                } else {
+                    console.error('❌ Nie można znaleźć tablicy lig w odpowiedzi:', data1);
                 }
             } catch (e) {
                 console.warn('⚠️ Błąd pobierania z /league-list:', e);
@@ -823,28 +842,51 @@
                 return footyStatsLeagues[leagueId];
             }
             
-            // Spróbuj pobrać z API po ID
-            try {
-                const url = `${PROXY}https://api.football-data-api.com/competition/${leagueId}?key=${FOOTYSTATS_KEY}`;
-                const res = await fetch(url);
-                const data = await res.json();
-                
-                if (data.data && data.data.name) {
-                    const leagueName = data.data.name;
-                    const countryName = data.data.country || '';
-                    const fullName = countryName ? `${leagueName} (${countryName})` : leagueName;
+            // Spróbuj różne endpointy API
+            const endpoints = [
+                `/competition/${leagueId}`,
+                `/league/${leagueId}`,
+                `/league-info/${leagueId}`,
+                `/competition-info/${leagueId}`
+            ];
+            
+            for (const endpoint of endpoints) {
+                try {
+                    const url = `${PROXY}https://api.football-data-api.com${endpoint}?key=${FOOTYSTATS_KEY}`;
+                    const res = await fetch(url);
                     
-                    // Dodaj do mapy na przyszłość
-                    if (footyStatsLeagues) {
-                        footyStatsLeagues[leagueId] = fullName;
+                    if (!res.ok) continue; // Próbuj następny endpoint
+                    
+                    const data = await res.json();
+                    
+                    // Sprawdź różne możliwe struktury odpowiedzi
+                    let leagueData = null;
+                    if (data.data) {
+                        leagueData = data.data;
+                    } else if (data.name || data.league_name) {
+                        leagueData = data;
                     }
                     
-                    return fullName;
+                    if (leagueData) {
+                        const leagueName = leagueData.name || leagueData.league_name || leagueData.competition_name || 'Unknown';
+                        const countryName = leagueData.country || leagueData.country_name || '';
+                        const fullName = countryName ? `${leagueName} (${countryName})` : leagueName;
+                        
+                        // Dodaj do mapy na przyszłość
+                        if (footyStatsLeagues) {
+                            footyStatsLeagues[leagueId] = fullName;
+                        }
+                        
+                        console.log(`   ✅ Endpoint ${endpoint} działa dla ID ${leagueId}`);
+                        return fullName;
+                    }
+                } catch (e) {
+                    // Cichy błąd - próbuj następny endpoint
+                    continue;
                 }
-            } catch (e) {
-                console.warn(`⚠️ Nie można pobrać ligi ${leagueId}:`, e);
             }
             
+            console.warn(`⚠️ Nie można pobrać ligi ${leagueId} z żadnego endpointu`);
             return null;
         }
 
@@ -942,15 +984,37 @@
                     console.log(`✅ FootyStats: Po filtrowaniu zostało ${matches.length} meczów z dnia ${today} (z ${allMatches.length} pobranych)`);
                     console.log(`🌍 Data lokalna użytkownika: ${new Date().toLocaleString('pl-PL')}`);
                     
+                    // ✅ KROK: Pobierz nazwy lig dla wszystkich ID które nie są w mapie
+                    const uniqueLeagueIds = [...new Set(matches.map(m => m.competition_id || m.league_id || m.leagueId || m.competitionID).filter(Boolean))];
+                    console.log(`🔍 Znaleziono ${uniqueLeagueIds.length} unikalnych ID lig w meczach`);
+                    
+                    // Dla każdego ID które nie jest w mapie, spróbuj pobrać nazwę z API
+                    console.log('📡 Pobieranie nazw lig dla brakujących ID...');
+                    for (const leagueId of uniqueLeagueIds) {
+                        if (!leaguesMap[leagueId]) {
+                            try {
+                                const leagueName = await getFootyStatsLeagueNameById(leagueId);
+                                if (leagueName) {
+                                    console.log(`   ✅ Znaleziono: ID ${leagueId} = ${leagueName}`);
+                                } else {
+                                    console.log(`   ⚠️ Nie znaleziono nazwy dla ID ${leagueId}`);
+                                }
+                            } catch (e) {
+                                console.warn(`   ❌ Błąd pobierania ligi ${leagueId}:`, e);
+                            }
+                            // Małe opóźnienie żeby nie przeciążyć API
+                            await new Promise(resolve => setTimeout(resolve, 100));
+                        }
+                    }
+                    
                     // DEBUG: Sprawdź pierwsze 5 ID lig z meczów i czy są w mapie
-                    console.log('🔍 DEBUG MAPOWANIA LIG:');
-                    const testLeagueIds = [...new Set(matches.slice(0, 10).map(m => m.competition_id || m.league_id || m.leagueId || m.competitionID).filter(Boolean))];
+                    console.log('🔍 DEBUG MAPOWANIA LIG (po pobraniu):');
+                    const testLeagueIds = uniqueLeagueIds.slice(0, 10);
                     testLeagueIds.forEach(leagueId => {
                         const leagueName = leaguesMap[leagueId];
                         console.log(`   ID ${leagueId}: ${leagueName || '❌ NIE ZNALEZIONO W MAPIE'}`);
                     });
                     console.log(`📊 Mapa lig zawiera ${Object.keys(leaguesMap).length} lig`);
-                    console.log(`📊 Przykładowe ID w mapie:`, Object.keys(leaguesMap).slice(0, 10));
                     
                     // Zlicz unikalne ligi (używając mapy ID -> nazwa)
                     const uniqueLeagues = new Set();
@@ -995,14 +1059,12 @@
                         const awayName = match.away_name || match.away?.name || match.awayTeam || 'Unknown';
                         const matchName = `${homeName} vs ${awayName}`;
                         
-                        // Pobierz nazwę ligi z mapy (używając ID ligi)
+                        // Pobierz nazwę ligi z mapy (używając ID ligi) - użyj zaktualizowanej mapy po pobraniu nazw
                         const leagueId = match.competition_id || match.league_id || match.leagueId || match.competitionID;
                         let leagueName = 'Unknown League';
-                        if (leagueId && leaguesMap[leagueId]) {
-                            leagueName = leaguesMap[leagueId];
-                        } else if (leagueId) {
-                            // Jeśli ID nie jest w mapie, użyj ID jako nazwy
-                            leagueName = `Liga ID: ${leagueId}`;
+                        if (leagueId) {
+                            // Sprawdź najpierw w zaktualizowanej mapie
+                            leagueName = leaguesMap[leagueId] || `Liga ID: ${leagueId}`;
                         }
                         
                         // DEBUG: Pierwsze 3 mecze - pokaż wszystkie pola związane ze statusem i ligą
@@ -1070,13 +1132,21 @@
                     
                     // Wyświetl szczegóły w konsoli (używając mapy)
                     console.log('📋 WSZYSTKIE MECZE (FootyStats):');
-                    uniqueLeagues.forEach(league => {
+                    // Utwórz mapę ID -> nazwa ligi dla wszystkich unikalnych lig
+                    const leagueIdToName = {};
+                    uniqueLeagueIds.forEach(leagueId => {
+                        const leagueName = leaguesMap[leagueId] || `Liga ID: ${leagueId}`;
+                        leagueIdToName[leagueId] = leagueName;
+                    });
+                    
+                    // Wyświetl statystyki po ID (nie po nazwie, bo nazwy mogą się powtarzać)
+                    uniqueLeagueIds.forEach(leagueId => {
+                        const leagueName = leagueIdToName[leagueId];
                         const leagueMatches = matches.filter(m => {
-                            const leagueId = m.competition_id || m.league_id || m.leagueId || m.competitionID;
-                            const ln = (leagueId && leaguesMap[leagueId]) ? leaguesMap[leagueId] : 'Unknown';
-                            return ln === league;
+                            const mLeagueId = m.competition_id || m.league_id || m.leagueId || m.competitionID;
+                            return mLeagueId === leagueId;
                         });
-                        console.log(`${league}: ${leagueMatches.length} meczów`);
+                        console.log(`${leagueName}: ${leagueMatches.length} meczów`);
                     });
                     
                 } else {
