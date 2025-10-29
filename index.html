@@ -310,8 +310,8 @@
             document.getElementById('info').textContent = '🔍 Sprawdzam dostępne ligi w Sportmonks...';
             
             try {
-                // Pobierz listę lig dostępnych w subskrypcji
-                const url = `${PROXY}https://api.sportmonks.com/v3/football/leagues?api_token=${SPORTMONKS_KEY}`;
+                // Pobierz listę lig dostępnych w subskrypcji (z krajem)
+                const url = `${PROXY}https://api.sportmonks.com/v3/football/leagues?api_token=${SPORTMONKS_KEY}&include=country`;
                 console.log('📡 Sprawdzam dostępne ligi:', url);
                 
                 const res = await fetch(url);
@@ -320,7 +320,11 @@
                 console.log('📦 Odpowiedź o ligach:', data);
                 
                 if (data.data && data.data.length > 0) {
-                    console.log(`✅ Znaleziono ${data.data.length} dostępnych lig`);
+                    console.log(`✅ Znaleziono ${data.data.length} lig w odpowiedzi`);
+                    
+                    // FILTRUJ TYLKO AKTYWNE LIGI
+                    const activeLeagues = data.data.filter(league => league.is_active === true || league.active === true);
+                    console.log(`🟢 Z tego ${activeLeagues.length} jest aktywnych`);
                     
                     // Wyświetl ligi w tabeli
                     const table = document.getElementById('predictions');
@@ -331,13 +335,21 @@
                         <th>Nazwa Ligi</th>
                         <th>Kraj</th>
                         <th>Typ</th>
-                        <th>Aktywna</th>
+                        <th>Status</th>
                     </tr>`;
                     
                     // Sortuj alfabetycznie
-                    const sortedLeagues = data.data.sort((a, b) => 
+                    const sortedLeagues = activeLeagues.sort((a, b) => 
                         (a.name || '').localeCompare(b.name || '')
                     );
+                    
+                    if (sortedLeagues.length === 0) {
+                        html += `<tr><td colspan="5" style="text-align:center; color:#ff5722;">
+                            ⚠️ WSZYSTKIE LIGI SĄ NIEAKTYWNE w Twoim planie!<br>
+                            To może oznaczać problem z API lub bardzo ograniczony plan.<br>
+                            Sprawdź szczegóły subskrypcji poniżej.
+                        </td></tr>`;
+                    }
                     
                     sortedLeagues.slice(0, 50).forEach(league => {
                         const isActive = league.is_active ? '✅' : '❌';
@@ -350,17 +362,19 @@
                         </tr>`;
                     });
                     
-                    if (data.data.length > 50) {
+                    if (activeLeagues.length > 50) {
                         html += `<tr><td colspan="5" style="text-align:center; color:#ffa500;">
-                            Pokazano 50 z ${data.data.length} lig. Sprawdź konsolę (F12) aby zobaczyć wszystkie.
+                            Pokazano 50 z ${activeLeagues.length} aktywnych lig. Sprawdź konsolę (F12) aby zobaczyć wszystkie.
                         </td></tr>`;
                     }
                     
                     table.innerHTML = html;
                     
                     document.getElementById('info').innerHTML = `
-                        ✅ Znaleziono <strong>${data.data.length} lig</strong> w Twoim planie Sportmonks<br>
-                        <small style="color:#aaa;">Jeśli nie widzisz Pucharu Polski/Anglii - sprawdź limit subskrypcji</small>
+                        ✅ Znaleziono <strong>${activeLeagues.length} aktywnych lig</strong> (z ${data.data.length} w sumie)<br>
+                        <small style="color:#aaa;">
+                            ${activeLeagues.length === 0 ? '⚠️ Brak aktywnych lig! Problem z planem lub API.' : 'Sprawdź czy Puchar Polski/FA Cup są na liście'}
+                        </small>
                     `;
                     
                     // Wyświetl szczegóły w konsoli
@@ -370,11 +384,27 @@
                     });
                     
                     // Pokaż info o subskrypcji
+                    console.log('📊 PEŁNA ODPOWIEDŹ (subscription, pagination, rate_limit):', {
+                        subscription: data.subscription,
+                        pagination: data.pagination,
+                        rate_limit: data.rate_limit
+                    });
+                    
                     if (data.subscription) {
-                        console.log('📊 INFORMACJE O SUBSKRYPCJI:', data.subscription);
+                        const sub = Array.isArray(data.subscription) ? data.subscription[0] : data.subscription;
+                        console.log('📊 INFORMACJE O SUBSKRYPCJI:', sub);
+                        
+                        let subInfo = '';
+                        if (sub.plan) subInfo += `Plan: <strong>${sub.plan}</strong> | `;
+                        if (sub.sport) subInfo += `Sport: ${sub.sport} | `;
+                        if (sub.category) subInfo += `Kategoria: ${sub.category}`;
+                        
                         document.getElementById('api-status').innerHTML = `
-                            ℹ️ Plan: <strong>${data.subscription.plan || 'Unknown'}</strong> | 
-                            Limity: ${JSON.stringify(data.subscription.limits || {})}
+                            ℹ️ ${subInfo || 'Brak szczegółów subskrypcji'}
+                        `;
+                    } else {
+                        document.getElementById('api-status').innerHTML = `
+                            ⚠️ Brak informacji o subskrypcji w odpowiedzi API
                         `;
                     }
                     
