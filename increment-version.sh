@@ -1,31 +1,50 @@
 #!/bin/bash
 
-# Skrypt do automatycznego zwiększania wersji
+# Prostszy skrypt do zwiększania wersji
 
-# Odczytaj aktualną wersję
-CURRENT_VERSION=$(grep -o '"version": "[^"]*"' version.json | grep -o '[0-9.]*')
+# Odczytaj wersję
+CURRENT_VERSION=$(grep '"version"' version.json | awk -F'"' '{print $4}')
 
-# Podziel wersję na główną i pomniejszą (np. 1.01 -> 1 i 01)
-MAJOR=$(echo $CURRENT_VERSION | cut -d'.' -f1)
-MINOR=$(echo $CURRENT_VERSION | cut -d'.' -f2)
+echo "📌 Aktualna wersja: $CURRENT_VERSION"
 
-# Zwiększ wersję pomniejszą
+# Sprawdź czy wersja jest poprawna
+if [ -z "$CURRENT_VERSION" ] || [ "$CURRENT_VERSION" = "null" ]; then
+    echo "❌ Błąd: Nie można odczytać wersji. Ustawiam domyślnie 1.01"
+    CURRENT_VERSION="1.01"
+fi
+
+# Podziel na major.minor
+IFS='.' read -r MAJOR MINOR <<< "$CURRENT_VERSION"
+
+# Jeśli któraś część jest pusta, użyj domyślnej
+if [ -z "$MAJOR" ]; then
+    MAJOR=1
+fi
+
+if [ -z "$MINOR" ]; then
+    MINOR=0
+fi
+
+# Usuń zera wiodące
+MAJOR=$((10#$MAJOR))
+MINOR=$((10#$MINOR))
+
+# Zwiększ minor
 MINOR=$((MINOR + 1))
 
-# Jeśli przekroczy 99, zwiększ główną
+# Jeśli minor > 99, zwiększ major
 if [ $MINOR -gt 99 ]; then
     MAJOR=$((MAJOR + 1))
     MINOR=1
 fi
 
-# Sformatuj z zerem wiodącym
-MINOR_PADDED=$(printf "%02d" $MINOR)
-NEW_VERSION="${MAJOR}.${MINOR_PADDED}"
+# Sformatuj nową wersję
+NEW_VERSION=$(printf "%d.%02d" $MAJOR $MINOR)
 
-# Aktualna data
+# Data
 CURRENT_DATE=$(date +%Y-%m-%d)
 
-# Zaktualizuj plik version.json
+# Zapisz
 cat > version.json << EOF
 {
   "version": "$NEW_VERSION",
@@ -35,8 +54,7 @@ EOF
 
 echo "✅ Wersja zwiększona: $CURRENT_VERSION -> $NEW_VERSION"
 
-# Dodaj plik do gita
+# Dodaj do git
 git add version.json
 
 exit 0
-
