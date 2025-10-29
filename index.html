@@ -658,6 +658,7 @@
                     table.style.display = 'table';
                     
                     let html = `<tr>
+                        <th>Lp.</th>
                         <th>Mecz</th>
                         <th>Liga</th>
                         <th>Status</th>
@@ -671,6 +672,7 @@
                         return (a.starting_at || '').localeCompare(b.starting_at || '');
                     });
                     
+                    let matchNumber = 1;
                     sortedMatches.forEach(match => {
                         // Parsuj nazwę meczu (Team1 vs Team2)
                         const matchName = match.name || 'Unknown vs Unknown';
@@ -703,10 +705,12 @@
                         }
                         
                         html += `<tr>
+                            <td>${matchNumber}</td>
                             <td><strong>${matchName}</strong></td>
                             <td>${leagueName}</td>
                             <td>${time}</td>
                         </tr>`;
+                        matchNumber++;
                     });
                     
                     table.innerHTML = html;
@@ -820,6 +824,7 @@
                     table.style.display = 'table';
                     
                     let html = `<tr>
+                        <th>Lp.</th>
                         <th>Mecz</th>
                         <th>Liga</th>
                         <th>Status</th>
@@ -834,6 +839,7 @@
                     });
                     
                     let debugCount = 0;
+                    let matchNumber = 1;
                     sortedMatches.forEach(match => {
                         // Parsuj nazwę meczu
                         const homeName = match.home_name || match.home?.name || match.homeTeam || 'Unknown';
@@ -893,10 +899,12 @@
                         }
                         
                         html += `<tr>
+                            <td>${matchNumber}</td>
                             <td><strong>${matchName}</strong></td>
                             <td>${leagueName}</td>
                             <td>${time}</td>
                         </tr>`;
+                        matchNumber++;
                     });
                     
                     table.innerHTML = html;
