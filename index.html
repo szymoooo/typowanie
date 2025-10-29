@@ -62,6 +62,7 @@
             <button onclick="loadTodayMatches()">SZUKAJ MECZÓW NA DZIŚ</button>
             <button onclick="loadMatchesForDate(1)">JUTRO</button>
             <button onclick="loadMatchesForDate(-1)">WCZORAJ</button>
+            <button onclick="checkAvailableLeagues()">SPRAWDŹ DOSTĘPNE LIGI</button>
             <button onclick="verifyAll()">SPRAWDŹ WYNIKI</button>
         </div>
 
@@ -302,6 +303,92 @@
 
         async function loadTodayMatches() {
             return loadMatchesForDate(0);
+        }
+
+        async function checkAvailableLeagues() {
+            document.getElementById('loader').style.display = 'inline-block';
+            document.getElementById('info').textContent = '🔍 Sprawdzam dostępne ligi w Sportmonks...';
+            
+            try {
+                // Pobierz listę lig dostępnych w subskrypcji
+                const url = `${PROXY}https://api.sportmonks.com/v3/football/leagues?api_token=${SPORTMONKS_KEY}`;
+                console.log('📡 Sprawdzam dostępne ligi:', url);
+                
+                const res = await fetch(url);
+                const data = await res.json();
+                
+                console.log('📦 Odpowiedź o ligach:', data);
+                
+                if (data.data && data.data.length > 0) {
+                    console.log(`✅ Znaleziono ${data.data.length} dostępnych lig`);
+                    
+                    // Wyświetl ligi w tabeli
+                    const table = document.getElementById('predictions');
+                    table.style.display = 'table';
+                    
+                    let html = `<tr>
+                        <th>ID</th>
+                        <th>Nazwa Ligi</th>
+                        <th>Kraj</th>
+                        <th>Typ</th>
+                        <th>Aktywna</th>
+                    </tr>`;
+                    
+                    // Sortuj alfabetycznie
+                    const sortedLeagues = data.data.sort((a, b) => 
+                        (a.name || '').localeCompare(b.name || '')
+                    );
+                    
+                    sortedLeagues.slice(0, 50).forEach(league => {
+                        const isActive = league.is_active ? '✅' : '❌';
+                        html += `<tr>
+                            <td>${league.id}</td>
+                            <td><strong>${league.name}</strong></td>
+                            <td>${league.country?.name || '-'}</td>
+                            <td>${league.type || '-'}</td>
+                            <td>${isActive}</td>
+                        </tr>`;
+                    });
+                    
+                    if (data.data.length > 50) {
+                        html += `<tr><td colspan="5" style="text-align:center; color:#ffa500;">
+                            Pokazano 50 z ${data.data.length} lig. Sprawdź konsolę (F12) aby zobaczyć wszystkie.
+                        </td></tr>`;
+                    }
+                    
+                    table.innerHTML = html;
+                    
+                    document.getElementById('info').innerHTML = `
+                        ✅ Znaleziono <strong>${data.data.length} lig</strong> w Twoim planie Sportmonks<br>
+                        <small style="color:#aaa;">Jeśli nie widzisz Pucharu Polski/Anglii - sprawdź limit subskrypcji</small>
+                    `;
+                    
+                    // Wyświetl szczegóły w konsoli
+                    console.log('📋 WSZYSTKIE DOSTĘPNE LIGI:');
+                    data.data.forEach((league, index) => {
+                        console.log(`${index + 1}. [${league.id}] ${league.name} (${league.country?.name || 'N/A'}) - ${league.is_active ? 'Aktywna' : 'Nieaktywna'}`);
+                    });
+                    
+                    // Pokaż info o subskrypcji
+                    if (data.subscription) {
+                        console.log('📊 INFORMACJE O SUBSKRYPCJI:', data.subscription);
+                        document.getElementById('api-status').innerHTML = `
+                            ℹ️ Plan: <strong>${data.subscription.plan || 'Unknown'}</strong> | 
+                            Limity: ${JSON.stringify(data.subscription.limits || {})}
+                        `;
+                    }
+                    
+                } else {
+                    document.getElementById('info').textContent = '❌ Brak dostępnych lig lub problem z API';
+                    console.error('Brak lig w odpowiedzi:', data);
+                }
+                
+            } catch (e) {
+                console.error('💥 BŁĄD podczas sprawdzania lig:', e);
+                document.getElementById('info').textContent = 'Błąd: ' + e.message;
+            }
+            
+            document.getElementById('loader').style.display = 'none';
         }
 
 
