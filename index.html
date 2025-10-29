@@ -736,6 +736,9 @@
         }
 
 
+        // Helper: opóźnienie
+        const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
         async function getAllProbabilities(home, away, id, league) {
             try {
                 console.log('  📡 Pobieranie prawdopodobieństw z API i web scraping...');
@@ -743,9 +746,18 @@
                 // ✅ WŁĄCZONE: Wszystkie źródła!
                 const p1 = 65; // Sportmonks - wartość domyślna
                 const p2 = await getFootyStatsProb(home, away);
+                
+                await delay(300); // Opóźnienie przed web scrapingiem
+                
                 const p3 = null; // API-Football - wyłączone (limit)
                 const p4 = await getTotalCornerProb(home, away);
+                
+                await delay(300); // Opóźnienie między zapytaniami
+                
                 const p5 = await getBetOnCornersProb(home);
+                
+                await delay(300); // Opóźnienie między zapytaniami
+                
                 const p6 = await getCornerStatProb(home, away);
                 
                 console.log(`  1️⃣ Sportmonks: ${p1}% (DOMYŚLNA)`);
@@ -874,14 +886,33 @@
                 const html = await res.text();
                 console.log(`    📄 HTML length: ${html.length} chars`);
                 
-                const match = html.match(/Average Corners per Match.*?(\d+\.\d+)/s);
+                // Szukaj różnych wariantów średniej rożnych
+                let match = html.match(/Average Corners per Match[:\s]+(\d+\.?\d*)/i);
+                if (!match) {
+                    match = html.match(/Total Corners[:\s]+(\d+\.?\d*)/i);
+                }
+                if (!match) {
+                    match = html.match(/avg.*?corners.*?(\d+\.?\d*)/i);
+                }
+                
                 if (match) {
                     const avg = parseFloat(match[1]);
-                    const prob = Math.min(95, Math.round(50 + (avg - 9) * 12));
+                    console.log(`    🔍 Znaleziono wartość: "${match[0]}" → avg=${avg}`);
+                    
+                    // Sprawdź czy wartość jest sensowna
+                    if (avg < 4 || avg > 20) {
+                        console.warn(`    ⚠️ TotalCorner: podejrzana wartość avg=${avg}`);
+                        return null;
+                    }
+                    
+                    // Lepsza formuła: avg 9.5 = 50%, każdy +1 = +8%
+                    const prob = Math.min(95, Math.max(20, Math.round(50 + (avg - 9.5) * 8)));
                     console.log(`    ✅ TotalCorner: avg=${avg} → ${prob}%`);
                     return prob;
                 } else {
                     console.warn(`    ⚠️ TotalCorner: nie znaleziono średniej rożnych`);
+                    const preview = html.substring(0, 500);
+                    console.log(`    🔍 HTML preview:`, preview);
                     return null;
                 }
             } catch (e) {
@@ -906,14 +937,34 @@
                 const html = await res.text();
                 console.log(`    📄 HTML length: ${html.length} chars`);
                 
-                const match = html.match(/Average Corners per Game.*?(\d+\.\d+)/s);
+                // Szukaj różnych wariantów średniej rożnych
+                let match = html.match(/Average Corners per Game[:\s]+(\d+\.?\d*)/i);
+                if (!match) {
+                    match = html.match(/Corners per match[:\s]+(\d+\.?\d*)/i);
+                }
+                if (!match) {
+                    match = html.match(/avg.*?corners.*?(\d+\.?\d*)/i);
+                }
+                
                 if (match) {
                     const avg = parseFloat(match[1]);
-                    const prob = Math.min(95, Math.round(55 + (avg - 9) * 15));
+                    console.log(`    🔍 Znaleziono wartość: "${match[0]}" → avg=${avg}`);
+                    
+                    // Sprawdź czy wartość jest sensowna (średnia rożnych powinna być 6-15)
+                    if (avg < 4 || avg > 20) {
+                        console.warn(`    ⚠️ BetOnCorners: podejrzana wartość avg=${avg} (oczekiwano 6-15)`);
+                        return null;
+                    }
+                    
+                    // Lepsza formuła konwersji: avg 9.5 = 50%, każdy +1 = +8%
+                    const prob = Math.min(95, Math.max(20, Math.round(50 + (avg - 9.5) * 8)));
                     console.log(`    ✅ BetOnCorners: avg=${avg} → ${prob}%`);
                     return prob;
                 } else {
                     console.warn(`    ⚠️ BetOnCorners: nie znaleziono średniej rożnych`);
+                    // DEBUG: pokaż fragment HTML
+                    const preview = html.substring(0, 500);
+                    console.log(`    🔍 HTML preview:`, preview);
                     return null;
                 }
             } catch (e) {
@@ -938,14 +989,33 @@
                 const html = await res.text();
                 console.log(`    📄 HTML length: ${html.length} chars`);
                 
-                const match = html.match(/Corners per match.*?(\d+\.\d+)/s);
+                // Szukaj różnych wariantów średniej rożnych
+                let match = html.match(/Corners per match[:\s]+(\d+\.?\d*)/i);
+                if (!match) {
+                    match = html.match(/Average corners[:\s]+(\d+\.?\d*)/i);
+                }
+                if (!match) {
+                    match = html.match(/Total.*?corners.*?(\d+\.?\d*)/i);
+                }
+                
                 if (match) {
                     const avg = parseFloat(match[1]);
-                    const prob = Math.min(95, Math.round(48 + (avg - 9) * 14));
+                    console.log(`    🔍 Znaleziono wartość: "${match[0]}" → avg=${avg}`);
+                    
+                    // Sprawdź czy wartość jest sensowna
+                    if (avg < 4 || avg > 20) {
+                        console.warn(`    ⚠️ CornerStat: podejrzana wartość avg=${avg}`);
+                        return null;
+                    }
+                    
+                    // Lepsza formuła: avg 9.5 = 50%, każdy +1 = +8%
+                    const prob = Math.min(95, Math.max(20, Math.round(50 + (avg - 9.5) * 8)));
                     console.log(`    ✅ CornerStat: avg=${avg} → ${prob}%`);
                     return prob;
                 } else {
                     console.warn(`    ⚠️ CornerStat: nie znaleziono średniej rożnych`);
+                    const preview = html.substring(0, 500);
+                    console.log(`    🔍 HTML preview:`, preview);
                     return null;
                 }
             } catch (e) {
@@ -977,7 +1047,7 @@
                 });
             }
             table.innerHTML = html;
-            document.getElementById('info').innerHTML = `Znaleziono <strong>${predictions.length}</strong> typów!<br><small style="color:#afa;">✅ Aktywne: Sportmonks + TotalCorner + BetOnCorners + CornerStat</small><br><small style="color:#faa;">❌ Wyłączone: FootyStats (404/403), API-Football (limit)</small>`;
+            document.getElementById('info').innerHTML = `Znaleziono <strong>${predictions.length}</strong> typów!<br><small style="color:#afa;">✅ Aktywne: Sportmonks + TotalCorner + BetOnCorners + CornerStat (z opóźnieniami anty-Cloudflare)</small><br><small style="color:#faa;">❌ Wyłączone: FootyStats (404/403), API-Football (limit)</small>`;
             updateStats();
         }
 
