@@ -724,19 +724,37 @@
             document.getElementById('info').textContent = '🔍 Sprawdzam dostępne ligi w FootyStats...';
             
             try {
-                // FootyStats - sprawdź dostępne ligi
-                const url = `https://api.footystats.org/leagues?key=${FOOTYSTATS_KEY}`;
+                // FootyStats - sprawdź dostępne ligi (MUSI BYĆ PRZEZ PROXY!)
+                const url = `${PROXY}https://api.footystats.org/leagues?key=${FOOTYSTATS_KEY}`;
                 console.log('📡 FootyStats URL:', url);
                 
                 const res = await fetch(url);
+                
+                if (!res.ok) {
+                    console.error(`❌ FootyStats błąd HTTP ${res.status}: ${res.statusText}`);
+                    const text = await res.text();
+                    console.error('📄 Odpowiedź:', text.substring(0, 500));
+                    throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+                }
+                
                 const data = await res.json();
                 
-                console.log('📦 Odpowiedź FootyStats:', data);
+                console.log('📦 Odpowiedź FootyStats (pełna):', data);
+                console.log('📊 Typ danych:', typeof data, Array.isArray(data) ? '(array)' : '(object)');
                 
+                // FootyStats może zwracać różne struktury
+                let leagues = [];
                 if (data.data && Array.isArray(data.data)) {
-                    const leagues = data.data;
-                    console.log(`✅ Znaleziono ${leagues.length} lig w FootyStats`);
-                    
+                    leagues = data.data;
+                    console.log(`✅ Znaleziono ${leagues.length} lig w data.data`);
+                } else if (Array.isArray(data)) {
+                    leagues = data;
+                    console.log(`✅ Znaleziono ${leagues.length} lig w root array`);
+                } else {
+                    console.error('❌ Nieznana struktura odpowiedzi FootyStats:', Object.keys(data));
+                }
+                
+                if (leagues.length > 0) {
                     // Wyświetl ligi w tabeli
                     const table = document.getElementById('predictions');
                     table.style.display = 'table';
@@ -777,10 +795,10 @@
                     leagues.forEach((league, index) => {
                         console.log(`${index + 1}. [${league.id}] ${league.name} (${league.country?.name || league.country})`);
                     });
-                    
                 } else {
-                    document.getElementById('info').textContent = '❌ Brak dostępnych lig lub problem z FootyStats API';
-                    console.error('Brak lig w odpowiedzi:', data);
+                    document.getElementById('info').textContent = '❌ Brak dostępnych lig w FootyStats API';
+                    console.error('⚠️ Brak lig w odpowiedzi. Sprawdź strukturę:', data);
+                    console.error('💡 Możliwe przyczyny: nieprawidłowy klucz API, inny format odpowiedzi, brak subskrypcji');
                 }
                 
             } catch (e) {
@@ -965,6 +983,10 @@
         }
 
         // === 2. FOOTYSTATS - ANALIZA OSTATNICH 10 MECZÓW ===
+        // UWAGA: FootyStats używa INNYCH nazw pól niż Sportmonks!
+        // - Sportmonks: participant_id, statistics[].type_id
+        // - FootyStats: total_corners_count, homeCorners, awayCorners
+        // Każde API ma swoją strukturę - musimy obsłużyć oba!
         async function getFootyStatsProb(home, away) {
             try {
                 console.log(`    🔍 FootyStats: Analizuję ${home} i ${away}`);
@@ -989,13 +1011,30 @@
                 let awayOver = 0, awayTotal = 0;
                 
                 homeMatches.forEach(m => {
-                    const total = (m.total_corners_count || 0);
+                    // FootyStats może używać różnych nazw dla rożnych
+                    const total = m.total_corners_count || 
+                                  m.totalCorners || 
+                                  m.corners_total ||
+                                  m.total_corners ||
+                                  (m.homeCorners && m.awayCorners ? m.homeCorners + m.awayCorners : null) ||
+                                  (m.home_corners && m.away_corners ? m.home_corners + m.away_corners : null) ||
+                                  0;
+                    
+                    console.log(`      📊 Mecz ${homeTotal + 1}: ${total} rożnych`);
                     if (total > 9.5) homeOver++;
                     homeTotal++;
                 });
                 
                 awayMatches.forEach(m => {
-                    const total = (m.total_corners_count || 0);
+                    const total = m.total_corners_count || 
+                                  m.totalCorners || 
+                                  m.corners_total ||
+                                  m.total_corners ||
+                                  (m.homeCorners && m.awayCorners ? m.homeCorners + m.awayCorners : null) ||
+                                  (m.home_corners && m.away_corners ? m.home_corners + m.away_corners : null) ||
+                                  0;
+                    
+                    console.log(`      📊 Mecz ${awayTotal + 1}: ${total} rożnych`);
                     if (total > 9.5) awayOver++;
                     awayTotal++;
                 });
@@ -1029,7 +1068,8 @@
         // Helper: Pobierz ostatnie mecze drużyny z FootyStats
         async function getFootyStatsTeamMatches(teamSlug, limit = 10) {
             try {
-                const url = `https://api.footystats.org/team-matches?key=${FOOTYSTATS_KEY}&team=${teamSlug}`;
+                // PROXY jest KONIECZNY dla FootyStats (CORS)!
+                const url = `${PROXY}https://api.footystats.org/team-matches?key=${FOOTYSTATS_KEY}&team=${teamSlug}`;
                 console.log(`    📡 FootyStats URL: ${url}`);
                 
                 const res = await fetch(url);
@@ -1041,9 +1081,27 @@
                 const data = await res.json();
                 console.log(`    📦 FootyStats odpowiedź dla ${teamSlug}:`, data);
                 
-                // FootyStats zwraca dane w różnych formatach
-                const matches = data.data || data.matches || [];
-                return matches.slice(0, limit);
+                // FootyStats może zwracać różne struktury danych
+                // Próbujemy kilka wariantów
+                let matches = [];
+                if (data.data && Array.isArray(data.data)) {
+                    matches = data.data;
+                } else if (data.matches && Array.isArray(data.matches)) {
+                    matches = data.matches;
+                } else if (Array.isArray(data)) {
+                    matches = data;
+                }
+                
+                // Filtruj tylko zakończone mecze
+                const finishedMatches = matches.filter(m => 
+                    m.status === 'complete' || 
+                    m.status === 'finished' || 
+                    m.finished === true ||
+                    (m.homeGoalCount !== undefined && m.awayGoalCount !== undefined)
+                );
+                
+                console.log(`    ✅ Znaleziono ${finishedMatches.length} zakończonych meczów dla ${teamSlug}`);
+                return finishedMatches.slice(0, limit);
                 
             } catch (e) {
                 console.error(`    ❌ Błąd pobierania meczów z FootyStats:`, e.message);
