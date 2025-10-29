@@ -632,24 +632,18 @@
                     let allMatches = data.data;
                     console.log(`📥 Sportmonks: Pobrano ${allMatches.length} meczów z API`);
                     
-                    // FILTRUJ tylko mecze z dzisiaj (w lokalnej strefie czasowej)
-                    const todayStart = new Date();
-                    todayStart.setHours(0, 0, 0, 0);
-                    const todayEnd = new Date();
-                    todayEnd.setHours(23, 59, 59, 999);
+                    // DEBUG: Sprawdź strukturę pierwszego meczu
+                    if (allMatches.length > 0) {
+                        console.log('📊 STRUKTURA PIERWSZEGO MECZU (Sportmonks):', allMatches[0]);
+                        console.log('⚽ Status meczu - state:', allMatches[0].state);
+                    }
                     
-                    const matches = allMatches.filter(match => {
-                        if (!match.starting_at) return false;
-                        const matchDate = new Date(match.starting_at);
-                        const isToday = matchDate >= todayStart && matchDate <= todayEnd;
-                        if (!isToday) {
-                            console.log(`⏭️ POMIJAM (nie dzisiaj):`, match.name, '| Data meczu:', matchDate.toLocaleString('pl-PL'));
-                        }
-                        return isToday;
-                    });
+                    // NIE FILTRUJ - API /fixtures/date/{today} zwraca tylko dzisiejsze mecze
+                    const matches = allMatches;
                     
-                    console.log(`✅ Sportmonks: Po filtrowaniu zostało ${matches.length} meczów z dzisiaj (${today})`);
-                    console.log(`📅 Zakres dzisiejszych dat: ${todayStart.toLocaleString('pl-PL')} - ${todayEnd.toLocaleString('pl-PL')}`);
+                    console.log(`✅ Sportmonks: Używam wszystkich ${matches.length} meczów z API (bez dodatkowego filtrowania)`);
+                    console.log(`📅 API endpoint /fixtures/date/${today} zwraca tylko mecze z tej daty`);
+                    console.log(`🌍 Data lokalna użytkownika: ${new Date().toLocaleString('pl-PL')}`);
                     
                     // Zlicz unikalne ligi
                     const uniqueLeagues = new Set();
@@ -765,33 +759,24 @@
                     if (allMatches.length > 0) {
                         console.log('📊 STRUKTURA PIERWSZEGO MECZU (FootyStats):', allMatches[0]);
                         console.log('📊 Wszystkie klucze meczu:', Object.keys(allMatches[0]));
+                        console.log('🏆 Nazwa ligi - competition:', allMatches[0].competition);
+                        console.log('🏆 Nazwa ligi - league:', allMatches[0].league);
+                        console.log('🏆 Nazwa ligi - competition_name:', allMatches[0].competition_name);
+                        console.log('🏆 Nazwa ligi - league_name:', allMatches[0].league_name);
+                        console.log('⚽ Status meczu - status:', allMatches[0].status);
+                        console.log('⚽ Status meczu - match_status:', allMatches[0].match_status);
+                        console.log('⚽ Finished:', allMatches[0].finished);
+                        console.log('⚽ homeGoalCount:', allMatches[0].homeGoalCount);
+                        console.log('⚽ awayGoalCount:', allMatches[0].awayGoalCount);
                     }
                     
-                    // FILTRUJ tylko mecze z dzisiaj (w lokalnej strefie czasowej)
-                    const todayStart = new Date();
-                    todayStart.setHours(0, 0, 0, 0);
-                    const todayEnd = new Date();
-                    todayEnd.setHours(23, 59, 59, 999);
+                    // NIE FILTRUJ - API zwraca tylko dzisiejsze mecze
+                    // Endpoint /todays-matches już zawiera tylko mecze z dzisiaj
+                    const matches = allMatches;
                     
-                    const matches = allMatches.filter(match => {
-                        let matchDate;
-                        if (match.date_unix) {
-                            matchDate = new Date(match.date_unix * 1000);
-                        } else if (match.date) {
-                            matchDate = new Date(match.date);
-                        } else {
-                            return false; // Brak daty - odrzuć
-                        }
-                        
-                        const isToday = matchDate >= todayStart && matchDate <= todayEnd;
-                        if (!isToday) {
-                            console.log(`⏭️ POMIJAM (nie dzisiaj):`, match.home_name || match.home?.name, 'vs', match.away_name || match.away?.name, '| Data meczu:', matchDate.toLocaleString('pl-PL'));
-                        }
-                        return isToday;
-                    });
-                    
-                    console.log(`✅ FootyStats: Po filtrowaniu zostało ${matches.length} meczów z dzisiaj (${today})`);
-                    console.log(`📅 Zakres dzisiejszych dat: ${todayStart.toLocaleString('pl-PL')} - ${todayEnd.toLocaleString('pl-PL')}`);
+                    console.log(`✅ FootyStats: Używam wszystkich ${matches.length} meczów z API (bez dodatkowego filtrowania)`);
+                    console.log(`📅 API endpoint /todays-matches zwraca tylko dzisiejsze mecze`);
+                    console.log(`🌍 Data lokalna użytkownika: ${new Date().toLocaleString('pl-PL')}`);
                     
                     // Zlicz unikalne ligi
                     const uniqueLeagues = new Set();
@@ -825,6 +810,7 @@
                         return (a.date_unix || 0) - (b.date_unix || 0);
                     });
                     
+                    let debugCount = 0;
                     sortedMatches.forEach(match => {
                         // Parsuj nazwę meczu
                         const homeName = match.home_name || match.home?.name || match.homeTeam || 'Unknown';
@@ -838,19 +824,32 @@
                                           match.competition ||
                                           'Unknown League';
                         
+                        // DEBUG: Pierwsze 3 mecze - pokaż wszystkie pola związane ze statusem
+                        if (debugCount < 3) {
+                            console.log(`🔍 DEBUG MECZ ${debugCount + 1}: ${matchName}`);
+                            console.log('   status:', match.status);
+                            console.log('   match_status:', match.match_status);
+                            console.log('   finished:', match.finished);
+                            console.log('   homeGoalCount:', match.homeGoalCount);
+                            console.log('   awayGoalCount:', match.awayGoalCount);
+                            console.log('   date_unix:', match.date_unix);
+                            console.log('   Czy ma bramki?', match.homeGoalCount !== undefined && match.awayGoalCount !== undefined);
+                            debugCount++;
+                        }
+                        
                         // Sprawdź status meczu (zakończony, trwający, zaplanowany)
                         const status = match.status || match.match_status || '';
                         const isFinished = status === 'complete' || 
                                           status === 'finished' || 
                                           status === 'FT' || 
-                                          match.finished === true ||
-                                          (match.homeGoalCount !== undefined && match.awayGoalCount !== undefined && status !== 'live');
+                                          match.finished === true;
+                        const isLive = status === 'live' || status === 'inplay' || status === 'LIVE';
                         
                         // Parsuj godzinę lub status
                         let time = '-';
                         if (isFinished) {
                             time = '✅ KONIEC';
-                        } else if (status === 'live' || status === 'inplay' || status === 'LIVE') {
+                        } else if (isLive) {
                             time = '🔴 LIVE';
                         } else {
                             if (match.date_unix) {
