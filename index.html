@@ -69,6 +69,7 @@
             <button id="btn-today">SZUKAJ MECZÓW NA DZIŚ</button>
             <button id="btn-sportmonks">POBIERZ MECZE (Sportmonks)</button>
             <button id="btn-footystats">POBIERZ MECZE (FootyStats)</button>
+            <button id="btn-apifootball">POBIERZ MECZE (API-Football)</button>
         </div>
 
         <p id="info">Kliknij przycisk, by pobrać mecze na dziś...</p>
@@ -134,6 +135,7 @@
             document.getElementById('btn-today').addEventListener('click', loadTodayMatches);
             document.getElementById('btn-sportmonks').addEventListener('click', checkAvailableLeagues);
             document.getElementById('btn-footystats').addEventListener('click', testFootyStatsAPI);
+            document.getElementById('btn-apifootball').addEventListener('click', getAPIFootballMatches);
         });
 
         // Funkcja pomocnicza do przetwarzania meczów
@@ -750,9 +752,12 @@
             }
             
             console.log('📡 Pobieranie listy lig z FootyStats...');
-            const url = `${PROXY}https://api.football-data-api.com/league-list?key=${FOOTYSTATS_KEY}`;
+            // WAŻNE: chosen_leagues_only=true zwraca tylko wybrane ligi użytkownika
+            const url = `${PROXY}https://api.football-data-api.com/league-list?key=${FOOTYSTATS_KEY}&chosen_leagues_only=true`;
             const res = await fetch(url);
             const data = await res.json();
+            
+            console.log('📦 Odpowiedź /league-list:', data);
             
             if (data.data && Array.isArray(data.data)) {
                 // Stwórz mapę ID -> nazwa ligi (z krajem)
@@ -765,7 +770,8 @@
                     footyStatsLeagues[leagueId] = fullName;
                 });
                 console.log(`✅ Załadowano ${Object.keys(footyStatsLeagues).length} lig FootyStats`);
-                console.log('📊 Przykładowe ligi:', Object.entries(footyStatsLeagues).slice(0, 5));
+                console.log('📊 Przykładowe ligi (pierwsze 10):', Object.entries(footyStatsLeagues).slice(0, 10));
+                console.log('📊 Czy liga 14932 jest w mapie?', footyStatsLeagues[14932]);
             } else {
                 console.error('❌ Błąd podczas pobierania lig:', data);
                 footyStatsLeagues = {};
@@ -979,6 +985,138 @@
                 
             } catch (e) {
                 console.error('💥 BŁĄD podczas testowania FootyStats:', e);
+                document.getElementById('info').textContent = 'Błąd: ' + e.message;
+            }
+            
+            document.getElementById('loader').style.display = 'none';
+        }
+
+        async function getAPIFootballMatches() {
+            document.getElementById('loader').style.display = 'inline-block';
+            document.getElementById('info').textContent = '🔍 Pobieranie dzisiejszych meczów z API-Football...';
+            
+            try {
+                // Pobierz dzisiejsze mecze z API-Football
+                const today = new Date().toISOString().split('T')[0];
+                const url = `${PROXY}https://v3.football.api-sports.io/fixtures?date=${today}&timezone=Europe/Warsaw`;
+                console.log('📡 API-Football - pobieranie meczów na:', today, url);
+                
+                const res = await fetch(url, {
+                    headers: {
+                        'x-apisports-key': API_FOOTBALL_KEYS[0]
+                    }
+                });
+                const data = await res.json();
+                
+                console.log('📦 Odpowiedź API-Football:', data);
+                
+                // Sprawdź czy osiągnięto limit
+                if (res.status === 429 || data.message?.includes('limit')) {
+                    document.getElementById('info').innerHTML = '❌ <strong>API-FOOTBALL</strong> - Osiągnięto limit zapytań (100/dzień)<br><small style="color:#aaa;">Limit odnowi się jutro o północy UTC</small>';
+                    console.error('❌ API-Football - limit zapytań osiągnięty');
+                    document.getElementById('loader').style.display = 'none';
+                    return;
+                }
+                
+                if (data.response && Array.isArray(data.response) && data.response.length > 0) {
+                    const matches = data.response;
+                    console.log(`📥 API-Football: Pobrano ${matches.length} meczów`);
+                    
+                    // DEBUG: Sprawdź strukturę pierwszego meczu
+                    if (matches.length > 0) {
+                        console.log('📊 STRUKTURA PIERWSZEGO MECZU (API-Football):', matches[0]);
+                    }
+                    
+                    // Zlicz unikalne ligi
+                    const uniqueLeagues = new Set();
+                    matches.forEach(match => {
+                        if (match.league?.name) {
+                            uniqueLeagues.add(match.league.name);
+                        }
+                    });
+                    
+                    // Wyświetl mecze w tabeli
+                    const table = document.getElementById('predictions');
+                    table.style.display = 'table';
+                    
+                    let html = `<tr>
+                        <th>Lp.</th>
+                        <th>Mecz</th>
+                        <th>Liga</th>
+                        <th>Status</th>
+                    </tr>`;
+                    
+                    // Sortuj po lidze, potem po godzinie
+                    const sortedMatches = matches.sort((a, b) => {
+                        const leagueA = a.league?.name || 'ZZZ';
+                        const leagueB = b.league?.name || 'ZZZ';
+                        if (leagueA !== leagueB) return leagueA.localeCompare(leagueB);
+                        return (a.fixture?.timestamp || 0) - (b.fixture?.timestamp || 0);
+                    });
+                    
+                    let matchNumber = 1;
+                    sortedMatches.forEach(match => {
+                        // Parsuj nazwę meczu
+                        const homeName = match.teams?.home?.name || 'Unknown';
+                        const awayName = match.teams?.away?.name || 'Unknown';
+                        const matchName = `${homeName} vs ${awayName}`;
+                        const leagueName = match.league?.name ? `${match.league.name} (${match.league.country})` : 'Unknown League';
+                        
+                        // Sprawdź status meczu
+                        const status = match.fixture?.status?.short || '';
+                        const isFinished = status === 'FT' || 
+                                          status === 'AET' || 
+                                          status === 'PEN';
+                        const isLive = status === '1H' || 
+                                      status === 'HT' || 
+                                      status === '2H' || 
+                                      status === 'ET' || 
+                                      status === 'P' ||
+                                      status === 'LIVE';
+                        
+                        // Parsuj godzinę lub status
+                        let time = '-';
+                        if (isFinished) {
+                            time = '✅ KONIEC';
+                        } else if (isLive) {
+                            time = '🔴 LIVE';
+                        } else {
+                            if (match.fixture?.timestamp) {
+                                const date = new Date(match.fixture.timestamp * 1000);
+                                time = date.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' });
+                            }
+                        }
+                        
+                        html += `<tr>
+                            <td>${matchNumber}</td>
+                            <td><strong>${matchName}</strong></td>
+                            <td>${leagueName}</td>
+                            <td>${time}</td>
+                        </tr>`;
+                        matchNumber++;
+                    });
+                    
+                    table.innerHTML = html;
+                    
+                    document.getElementById('info').innerHTML = `
+                        ✅ <strong>API-FOOTBALL</strong> - Znaleziono <strong>${matches.length} meczów</strong> z <strong>${uniqueLeagues.size} lig</strong><br>
+                        <small style="color:#aaa;">📅 Data: ${today} | Limit: ${data.requests?.current || '?'}/${data.requests?.limit_day || '100'} zapytań dzisiaj</small>
+                    `;
+                    
+                    // Wyświetl szczegóły w konsoli
+                    console.log('📋 WSZYSTKIE MECZE (API-Football):');
+                    uniqueLeagues.forEach(league => {
+                        const leagueMatches = matches.filter(m => m.league?.name === league);
+                        console.log(`${league}: ${leagueMatches.length} meczów`);
+                    });
+                    
+                } else {
+                    document.getElementById('info').textContent = '❌ Brak meczów lub problem z API-Football';
+                    console.error('Brak meczów w odpowiedzi:', data);
+                }
+                
+            } catch (e) {
+                console.error('💥 BŁĄD podczas pobierania z API-Football:', e);
                 document.getElementById('info').textContent = 'Błąd: ' + e.message;
             }
             
