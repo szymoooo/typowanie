@@ -832,10 +832,23 @@
                     console.log('🔍 Przykładowa liga (pierwsza):', leaguesArray[0]);
                     console.log('🔍 Klucze pierwszej ligi:', Object.keys(leaguesArray[0]));
                     
+                    // DEBUG: Sprawdź strukturę season (może tam jest ID?)
+                    if (leaguesArray[0].season && Array.isArray(leaguesArray[0].season) && leaguesArray[0].season.length > 0) {
+                        console.log('🔍 Przykładowy season (pierwszy):', leaguesArray[0].season[0]);
+                        console.log('🔍 Klucze season:', Object.keys(leaguesArray[0].season[0]));
+                    }
+                    
                     let skippedCount = 0;
                     leaguesArray.forEach((league, index) => {
                         // Spróbuj różne możliwe pola dla ID
-                        const leagueId = league.id || league.league_id || league.competition_id;
+                        let leagueId = league.id || league.league_id || league.competition_id;
+                        
+                        // Jeśli nie ma ID bezpośrednio, sprawdź w season array (może jest tam competition_id?)
+                        if (!leagueId && league.season && Array.isArray(league.season) && league.season.length > 0) {
+                            const firstSeason = league.season[0];
+                            leagueId = firstSeason.competition_id || firstSeason.league_id || firstSeason.id;
+                        }
+                        
                         const leagueName = league.name || league.league_name || league.competition_name || 'Unknown';
                         const countryName = league.country || league.country_name || '';
                         const fullName = countryName ? `${leagueName} (${countryName})` : leagueName;
@@ -1111,7 +1124,7 @@
                 const now = Math.floor(Date.now() / 1000);
                 const yesterdayStart = now - 86400; // 24 godziny temu (żeby pokazać zakończone mecze z wczoraj które się zakończyły dziś)
                 
-                console.log(`📅 Filtrowanie meczów: zaplanowane na dziś + zakończone + LIVE`);
+                console.log(`📅 Filtrowanie meczów: pokazuję zaplanowane na dziś, trwające LIVE i zakończone z ostatnich 24h`);
                 console.log(`   Przedział czasowy dla zaplanowanych: ${todayStart} - ${todayEnd} (Unix)`);
                 console.log(`   Przedział lokalny: ${new Date(todayStart * 1000).toLocaleString('pl-PL')} - ${new Date(todayEnd * 1000).toLocaleString('pl-PL')}`);
                 
