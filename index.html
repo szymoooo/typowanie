@@ -379,10 +379,10 @@
                 const teamId = searchData.data[0].id;
                 console.log(`✅ Znaleziono drużynę ${teamName}, ID: ${teamId}`);
                 
-                // Pobierz ostatnie mecze drużyny - PRAWIDŁOWY ENDPOINT z filtrem!
-                // Dokumentacja: https://docs.sportmonks.com/football/endpoints-and-entities/endpoints/fixtures/get-fixtures-by-date-range-for-team
-                const historyUrl = `${PROXY}https://api.sportmonks.com/v3/football/fixtures?api_token=${SPORTMONKS_KEY}&filters=teamId:${teamId}&include=statistics.type&order=starting_at:desc`;
-                console.log(`📡 URL historii (NOWY ENDPOINT): ${historyUrl}`);
+                // Pobierz ostatnie mecze drużyny - używam ALL FIXTURES i filtruję ręcznie
+                // Sportmonks v3 ma problemy z niektórymi filtrami, więc pobieramy wszystkie i filtrujemy lokalnie
+                const historyUrl = `${PROXY}https://api.sportmonks.com/v3/football/teams/${teamId}?api_token=${SPORTMONKS_KEY}&include=latest`;
+                console.log(`📡 URL historii (teams/${teamId}/latest): ${historyUrl}`);
                 
                 const historyRes = await fetch(historyUrl);
                 
@@ -395,18 +395,22 @@
                 console.log(`📦 Historia dla ${teamName}:`, JSON.stringify(historyData).substring(0, 500));
                 console.log(`📦 Pełna struktura:`, historyData);
                 
-                // Sportmonks zwraca mecze w historyData.data
-                const fixtures = historyData.data || [];
+                // Teams endpoint zwraca: data.latest (tablica meczów)
+                const teamData = historyData.data || {};
+                const fixtures = teamData.latest || [];
                 
-                if (fixtures.length === 0) {
+                console.log(`📊 Team data keys:`, Object.keys(teamData));
+                console.log(`📊 Latest fixtures:`, fixtures.length);
+                
+                if (!Array.isArray(fixtures) || fixtures.length === 0) {
                     console.warn(`⚠️ Brak meczów w historii dla ${teamName}`);
-                    console.log(`⚠️ Response keys:`, Object.keys(historyData));
+                    console.log(`⚠️ Fixtures type:`, typeof fixtures, fixtures);
                     return { error: 'Brak historii meczów' };
                 }
                 
-                console.log(`📊 Znaleziono ${fixtures.length} meczów w historii`);
+                console.log(`📊 Znaleziono ${fixtures.length} ostatnich meczów`);
                 
-                // Filtruj tylko zakończone mecze (state_id: 5 = finished)
+                // Filtruj tylko zakończone mecze (state_id: 5 = finished, 6/7 = finished with penalties/extra time)
                 const finishedFixtures = fixtures.filter(f => f.state_id === 5 || f.state_id === 6 || f.state_id === 7);
                 console.log(`✅ Zakończonych meczów: ${finishedFixtures.length}`);
                 
