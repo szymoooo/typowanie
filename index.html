@@ -752,12 +752,12 @@
             }
             
             console.log('📡 Pobieranie listy lig z FootyStats...');
-            // WAŻNE: chosen_leagues_only=true zwraca tylko wybrane ligi użytkownika
-            const url = `${PROXY}https://api.football-data-api.com/league-list?key=${FOOTYSTATS_KEY}&chosen_leagues_only=true`;
+            // Pobierz WSZYSTKIE ligi (bez chosen_leagues_only - żeby mieć pełną mapę)
+            const url = `${PROXY}https://api.football-data-api.com/league-list?key=${FOOTYSTATS_KEY}`;
             const res = await fetch(url);
             const data = await res.json();
             
-            console.log('📦 Odpowiedź /league-list:', data);
+            console.log('📦 Odpowiedź /league-list (ilość lig w odpowiedzi):', data.data?.length || 0);
             
             if (data.data && Array.isArray(data.data)) {
                 // Stwórz mapę ID -> nazwa ligi (z krajem)
@@ -769,9 +769,10 @@
                     const fullName = countryName ? `${leagueName} (${countryName})` : leagueName;
                     footyStatsLeagues[leagueId] = fullName;
                 });
-                console.log(`✅ Załadowano ${Object.keys(footyStatsLeagues).length} lig FootyStats`);
+                console.log(`✅ Załadowano ${Object.keys(footyStatsLeagues).length} lig FootyStats do mapy`);
                 console.log('📊 Przykładowe ligi (pierwsze 10):', Object.entries(footyStatsLeagues).slice(0, 10));
                 console.log('📊 Czy liga 14932 jest w mapie?', footyStatsLeagues[14932]);
+                console.log('📊 Czy liga 16009 jest w mapie?', footyStatsLeagues[16009]);
             } else {
                 console.error('❌ Błąd podczas pobierania lig:', data);
                 footyStatsLeagues = {};
