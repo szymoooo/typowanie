@@ -2477,6 +2477,60 @@
             16398: 'Brazil - Paraibano Women',
         };
         
+        // ✅ MAPA 50 ZAZNACZONYCH LIG (priorytet - najpierw filtrujemy mecze dla tych lig)
+        const SELECTED_LEAGUES_MAP = {
+            14923: 'Austria - Bundesliga',
+            16149: 'Belarus - Vysheyshaya Liga',
+            14937: 'Belgium - Pro League',
+            15001: 'Bosnia and Herzegovina - Premier League of Bosnia',
+            14231: 'Brazil - Serie A',
+            15053: 'Croatia - Prva HNL',
+            15366: 'Cyprus - First Division',
+            14973: 'Czech Republic - First League',
+            15055: 'Denmark - Superliga',
+            15050: 'England - Premier League',
+            15119: 'England - Community Shield',
+            14930: 'England - Championship',
+            15137: 'England - League Cup',
+            14934: 'England - EFL League One',
+            15238: 'England - FA Cup',
+            15588: 'England - FA Trophy',
+            14165: 'Estonia - Meistriliiga',
+            14924: 'Europe - UEFA Champions League',
+            15002: 'Europe - UEFA Europa League',
+            14904: 'Europe - UEFA Europa Conference League',
+            14089: 'Finland - Veikkausliiga',
+            14932: 'France - Ligue 1',
+            14968: 'Germany - Bundesliga',
+            14931: 'Germany - 2. Bundesliga',
+            15035: 'Germany - DFB Pokal',
+            15163: 'Greece - Super League',
+            14963: 'Hungary - NB I',
+            14017: 'Iceland - Úrvalsdeild',
+            15068: 'Italy - Serie A',
+            15037: 'Italy - Coppa Italia',
+            16107: 'Italy - Supercoppa Italiana',
+            16242: 'Japan - J1 League',
+            14291: 'Lithuania - A Lyga',
+            14936: 'Netherlands - Eredivisie',
+            16009: 'Netherlands - KNVB Cup',
+            16260: 'Norway - Eliteserien',
+            15901: 'Norway - Norwegian Football Cup',
+            15031: 'Poland - Ekstraklasa',
+            14877: 'Poland - 1. Liga',
+            16112: 'Poland - Polish Cup',
+            15115: 'Portugal - Liga NOS',
+            13952: 'Republic of Ireland - Premier Division',
+            15000: 'Scotland - Premiership',
+            15065: 'Serbia - SuperLiga',
+            16214: 'Slovakia - Super Liga',
+            15063: 'Slovenia - PrvaLiga',
+            14956: 'Spain - La Liga',
+            16092: 'Spain - Copa del Rey',
+            14972: 'Turkey - Süper Lig',
+            15932: 'Turkey - Turkish Cup'
+        };
+        
         async function getFootyStatsLeagues() {
             if (footyStatsLeagues) {
                 console.log('✅ Używam cache lig FootyStats');
@@ -2575,22 +2629,20 @@
             // więc pomijamy go - /league-list wystarczy
             // Kod pozostawiony na wypadek gdyby endpoint został dodany w przyszłości
             
-            console.log(`✅ RAZEM załadowano ${Object.keys(footyStatsLeagues).length} lig FootyStats do mapy`);
+            console.log(`✅ RAZEM załadowano ${Object.keys(footyStatsLeagues).length} lig FootyStats z API`);
             console.log('📊 Przykładowe ligi (pierwsze 10):', Object.entries(footyStatsLeagues).slice(0, 10));
             
-            // ✅ KROK 3: Dodaj statyczną mapę jako fallback dla znanych lig
-            let staticAdded = 0;
+            // ✅ KROK 3: Użyj TYLKO statycznej mapy dla FootyStats (1727 lig) - bez dodawania z API
+            // Dla FootyStats używamy tylko STATIC_LEAGUES_MAP - nie łączymy z API żeby uniknąć duplikatów
+            // API może zwrócić inne ligi które nie są w naszej statycznej mapie, ale ignorujemy je dla FootyStats
+            const footyStatsLeaguesOnly = {};
             Object.keys(STATIC_LEAGUES_MAP).forEach(leagueId => {
-                if (!footyStatsLeagues[leagueId]) {
-                    footyStatsLeagues[leagueId] = STATIC_LEAGUES_MAP[leagueId];
-                    staticAdded++;
-                }
+                footyStatsLeaguesOnly[leagueId] = STATIC_LEAGUES_MAP[leagueId];
             });
-            if (staticAdded > 0) {
-                console.log(`✅ Dodano ${staticAdded} lig ze statycznej mapy (fallback)`);
-            }
             
-            return footyStatsLeagues;
+            console.log(`✅ Używam tylko STATIC_LEAGUES_MAP dla FootyStats (${Object.keys(footyStatsLeaguesOnly).length} lig)`);
+            
+            return footyStatsLeaguesOnly;
         }
         
         // Helper: Pobierz nazwę ligi po ID (jeśli nie ma w mapie)
@@ -2725,6 +2777,18 @@
                     let allMatches = data.data;
                     console.log(`📥 FootyStats: Pobrano ${allMatches.length} meczów z API`);
                     
+                    // ✅ KROK 0: Najpierw filtruj mecze tylko dla 50 zaznaczonych lig (priorytet)
+                    const selectedLeagueIds = Object.keys(SELECTED_LEAGUES_MAP).map(id => parseInt(id));
+                    const matchesFromSelectedLeagues = allMatches.filter(match => {
+                        const leagueId = match.competition_id || match.league_id || match.leagueId || match.competitionID;
+                        return leagueId && selectedLeagueIds.includes(parseInt(leagueId));
+                    });
+                    
+                    console.log(`🎯 Filtrowanie dla 50 zaznaczonych lig: ${matchesFromSelectedLeagues.length} meczów (z ${allMatches.length} pobranych)`);
+                    
+                    // Użyj tylko meczów z zaznaczonych lig
+                    allMatches = matchesFromSelectedLeagues;
+                    
                     // DEBUG: Sprawdź strukturę pierwszego meczu
                     if (allMatches.length > 0) {
                         console.log('📊 STRUKTURA PIERWSZEGO MECZU (FootyStats):', allMatches[0]);
@@ -2839,19 +2903,22 @@
                 console.log('🔍 DEBUG MAPOWANIA LIG (po pobraniu):');
                 const testLeagueIds = uniqueLeagueIds.slice(0, 10);
                 testLeagueIds.forEach(leagueId => {
-                    // Statyczna mapa ma priorytet
-                    const leagueName = STATIC_LEAGUES_MAP[leagueId] || leaguesMap[leagueId];
+                    // Kolejność priorytetu: SELECTED_LEAGUES_MAP > STATIC_LEAGUES_MAP > leaguesMap
+                    const leagueName = SELECTED_LEAGUES_MAP[leagueId] || STATIC_LEAGUES_MAP[leagueId] || leaguesMap[leagueId];
                     console.log(`   ID ${leagueId}: ${leagueName || '❌ NIE ZNALEZIONO W MAPIE'}`);
                 });
-                console.log(`📊 Mapa lig zawiera ${Object.keys(leaguesMap).length} lig`);
+                // Użyj tylko STATIC_LEAGUES_MAP dla FootyStats (1727 lig) - bez lig z API
+                const footyStatsLeaguesCount = Object.keys(STATIC_LEAGUES_MAP).length;
+                console.log(`📊 STATIC_LEAGUES_MAP zawiera ${footyStatsLeaguesCount} lig (tylko FootyStats)`);
+                console.log(`📊 SELECTED_LEAGUES_MAP zawiera ${Object.keys(SELECTED_LEAGUES_MAP).length} zaznaczonych lig`);
                 
                 // Zlicz unikalne ligi (używając mapy ID -> nazwa + statyczna mapa)
                     const uniqueLeagues = new Set();
                     matches.forEach(match => {
                         const leagueId = match.competition_id || match.league_id || match.leagueId || match.competitionID;
                     if (leagueId) {
-                        // Statyczna mapa ma priorytet (poprawne dane)
-                        const leagueName = STATIC_LEAGUES_MAP[leagueId] || leaguesMap[leagueId];
+                        // Kolejność priorytetu: SELECTED_LEAGUES_MAP > STATIC_LEAGUES_MAP > leaguesMap (z API)
+                        const leagueName = SELECTED_LEAGUES_MAP[leagueId] || STATIC_LEAGUES_MAP[leagueId] || leaguesMap[leagueId];
                         if (leagueName) {
                             uniqueLeagues.add(leagueName);
                         } else {
@@ -2877,9 +2944,9 @@
                     const sortedMatches = matches.sort((a, b) => {
                         const leagueIdA = a.competition_id || a.league_id || a.leagueId || a.competitionID;
                         const leagueIdB = b.competition_id || b.league_id || b.leagueId || b.competitionID;
-                        // Statyczna mapa ma priorytet
-                        const leagueA = (leagueIdA && (STATIC_LEAGUES_MAP[leagueIdA] || leaguesMap[leagueIdA])) ? (STATIC_LEAGUES_MAP[leagueIdA] || leaguesMap[leagueIdA]) : 'ZZZ';
-                        const leagueB = (leagueIdB && (STATIC_LEAGUES_MAP[leagueIdB] || leaguesMap[leagueIdB])) ? (STATIC_LEAGUES_MAP[leagueIdB] || leaguesMap[leagueIdB]) : 'ZZZ';
+                        // Kolejność priorytetu: SELECTED_LEAGUES_MAP > STATIC_LEAGUES_MAP > leaguesMap
+                        const leagueA = (leagueIdA && (SELECTED_LEAGUES_MAP[leagueIdA] || STATIC_LEAGUES_MAP[leagueIdA] || leaguesMap[leagueIdA])) ? (SELECTED_LEAGUES_MAP[leagueIdA] || STATIC_LEAGUES_MAP[leagueIdA] || leaguesMap[leagueIdA]) : 'ZZZ';
+                        const leagueB = (leagueIdB && (SELECTED_LEAGUES_MAP[leagueIdB] || STATIC_LEAGUES_MAP[leagueIdB] || leaguesMap[leagueIdB])) ? (SELECTED_LEAGUES_MAP[leagueIdB] || STATIC_LEAGUES_MAP[leagueIdB] || leaguesMap[leagueIdB]) : 'ZZZ';
                         if (leagueA !== leagueB) return leagueA.localeCompare(leagueB);
                         return (a.date_unix || 0) - (b.date_unix || 0);
                     });
@@ -2896,8 +2963,8 @@
                         const leagueId = match.competition_id || match.league_id || match.leagueId || match.competitionID;
                         let leagueName = 'Unknown League';
                     if (leagueId) {
-                        // Sprawdź najpierw w statycznej mapie (ma priorytet - poprawne dane), potem w mapie z API
-                        leagueName = STATIC_LEAGUES_MAP[leagueId] || leaguesMap[leagueId] || `Liga ID: ${leagueId}`;
+                        // Kolejność priorytetu: SELECTED_LEAGUES_MAP > STATIC_LEAGUES_MAP > leaguesMap (z API)
+                        leagueName = SELECTED_LEAGUES_MAP[leagueId] || STATIC_LEAGUES_MAP[leagueId] || leaguesMap[leagueId] || `Liga ID: ${leagueId}`;
                         }
                         
                         // DEBUG: Pierwsze 3 mecze - pokaż wszystkie pola związane ze statusem i ligą
