@@ -67,7 +67,8 @@
 
         <div class="buttons">
             <button onclick="loadTodayMatches()">SZUKAJ MECZÓW NA DZIŚ</button>
-            <button onclick="checkAvailableLeagues()">SPRAWDŹ DOSTĘPNE LIGI</button>
+            <button onclick="checkAvailableLeagues()">SPRAWDŹ LIGI (Sportmonks)</button>
+            <button onclick="testFootyStatsAPI()">TEST FOOTYSTATS API</button>
         </div>
 
         <p id="info">Kliknij przycisk, by pobrać mecze na dziś...</p>
@@ -716,9 +717,117 @@
             document.getElementById('loader').style.display = 'none';
         }
 
-        // FootyStats nie ma endpointu /leagues - API zwraca 404
-        // FootyStats działa tylko dla analizy konkretnych meczów/drużyn
-        // Listowanie lig dostępne tylko w Sportmonks
+        async function testFootyStatsAPI() {
+            document.getElementById('loader').style.display = 'inline-block';
+            document.getElementById('info').textContent = '🔍 Testuję FootyStats API...';
+            
+            try {
+                // Test 1: Sprawdź test endpoint z dokumentacji
+                console.log('=== TEST 1: Test endpoint z dokumentacji ===');
+                const testUrl1 = `${PROXY}https://api.football-data-api.com/test-call?key=${FOOTYSTATS_KEY}`;
+                console.log('📡 URL (football-data-api.com):', testUrl1);
+                
+                try {
+                    const res1 = await fetch(testUrl1);
+                    const data1 = await res1.text();
+                    console.log('✅ Status:', res1.status);
+                    console.log('📦 Odpowiedź:', data1);
+                } catch (e) {
+                    console.error('❌ Błąd:', e.message);
+                }
+                
+                // Test 2: Sprawdź stary URL
+                console.log('\n=== TEST 2: Stary URL (api.footystats.org) ===');
+                const testUrl2 = `${PROXY}https://api.footystats.org/leagues?key=${FOOTYSTATS_KEY}`;
+                console.log('📡 URL:', testUrl2);
+                
+                try {
+                    const res2 = await fetch(testUrl2);
+                    const data2 = await res2.json();
+                    console.log('✅ Status:', res2.status);
+                    console.log('📦 Odpowiedź:', data2);
+                } catch (e) {
+                    console.error('❌ Błąd:', e.message);
+                }
+                
+                // Test 3: Sprawdź czy są dostępne ligi w API
+                console.log('\n=== TEST 3: Pobieranie lig (football-data-api.com) ===');
+                const testUrl3 = `${PROXY}https://api.football-data-api.com/league-list?key=${FOOTYSTATS_KEY}`;
+                console.log('📡 URL:', testUrl3);
+                
+                try {
+                    const res3 = await fetch(testUrl3);
+                    const data3 = await res3.json();
+                    console.log('✅ Status:', res3.status);
+                    console.log('📦 Odpowiedź:', data3);
+                    
+                    if (data3.data && Array.isArray(data3.data)) {
+                        console.log(`✅ Znaleziono ${data3.data.length} lig w Twoim planie!`);
+                        
+                        // Wyświetl w tabeli
+                        const table = document.getElementById('predictions');
+                        table.style.display = 'table';
+                        
+                        let html = `<tr>
+                            <th>ID</th>
+                            <th>Nazwa Ligi</th>
+                            <th>Kraj</th>
+                            <th>Sezon</th>
+                        </tr>`;
+                        
+                        data3.data.forEach(league => {
+                            html += `<tr>
+                                <td>${league.id || league.league_id || '-'}</td>
+                                <td><strong>${league.name || league.competition || 'Unknown'}</strong></td>
+                                <td>${league.country || league.country_name || '-'}</td>
+                                <td>${league.season || league.year || '-'}</td>
+                            </tr>`;
+                        });
+                        
+                        table.innerHTML = html;
+                        
+                        document.getElementById('info').innerHTML = `
+                            ✅ <strong>FootyStats API działa!</strong><br>
+                            Znaleziono <strong>${data3.data.length} lig</strong> w Twoim planie FootyStats<br>
+                            <small style="color:#aaa;">Sprawdź konsolę (F12) dla szczegółów</small>
+                        `;
+                    }
+                } catch (e) {
+                    console.error('❌ Błąd:', e.message);
+                }
+                
+                // Test 4: Inne możliwe endpointy
+                console.log('\n=== TEST 4: Inne możliwe endpointy ===');
+                const endpoints = [
+                    'https://api.football-data-api.com/leagues',
+                    'https://api.football-data-api.com/league-seasons',
+                    'https://api.football-data-api.com/competitions'
+                ];
+                
+                for (const endpoint of endpoints) {
+                    const url = `${PROXY}${endpoint}?key=${FOOTYSTATS_KEY}`;
+                    console.log(`📡 Testuję: ${endpoint}`);
+                    try {
+                        const res = await fetch(url);
+                        const data = await res.json();
+                        console.log(`   ✅ Status ${res.status}:`, data);
+                    } catch (e) {
+                        console.log(`   ❌ Błąd: ${e.message}`);
+                    }
+                }
+                
+                document.getElementById('info').innerHTML = `
+                    ℹ️ Test zakończony - sprawdź konsolę (F12) dla szczegółów<br>
+                    <small style="color:#aaa;">Szukam poprawnego endpointu dla Twoich 50 wybranych lig</small>
+                `;
+                
+            } catch (e) {
+                console.error('💥 BŁĄD podczas testowania FootyStats:', e);
+                document.getElementById('info').textContent = 'Błąd: ' + e.message;
+            }
+            
+            document.getElementById('loader').style.display = 'none';
+        }
 
         // Helper: opóźnienie
         const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
