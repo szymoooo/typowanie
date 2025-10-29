@@ -1261,19 +1261,19 @@
                 // Utwórz mapę ID -> nazwa ligi dla wszystkich unikalnych lig
                 const leagueIdToName = {};
                 uniqueLeagueIds.forEach(leagueId => {
-                    const leagueName = leaguesMap[leagueId] || `Liga ID: ${leagueId}`;
+                    const leagueName = leaguesMap[leagueId] || STATIC_LEAGUES_MAP[leagueId] || `Liga ID: ${leagueId}`;
                     leagueIdToName[leagueId] = leagueName;
                 });
                 
                 // Wyświetl statystyki po ID (nie po nazwie, bo nazwy mogą się powtarzać)
                 uniqueLeagueIds.forEach(leagueId => {
                     const leagueName = leagueIdToName[leagueId] || STATIC_LEAGUES_MAP[leagueId] || `Liga ID: ${leagueId}`;
-                    const leagueMatches = matches.filter(m => {
+                        const leagueMatches = matches.filter(m => {
                         const mLeagueId = m.competition_id || m.league_id || m.leagueId || m.competitionID;
                         return mLeagueId === leagueId;
-                    });
+                        });
                     console.log(`${leagueName}: ${leagueMatches.length} meczów`);
-                });
+                    });
                 
             } catch (e) {
                 console.error('💥 BŁĄD podczas testowania FootyStats:', e);
