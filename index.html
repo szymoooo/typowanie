@@ -379,9 +379,10 @@
                 const teamId = searchData.data[0].id;
                 console.log(`✅ Znaleziono drużynę ${teamName}, ID: ${teamId}`);
                 
-                // Pobierz ostatnie mecze drużyny (z pełnymi statystykami!)
-                const historyUrl = `${PROXY}https://api.sportmonks.com/v3/football/fixtures/latest/${teamId}?api_token=${SPORTMONKS_KEY}&include=statistics.type`;
-                console.log(`📡 URL historii: ${historyUrl}`);
+                // Pobierz ostatnie mecze drużyny - PRAWIDŁOWY ENDPOINT z filtrem!
+                // Dokumentacja: https://docs.sportmonks.com/football/endpoints-and-entities/endpoints/fixtures/get-fixtures-by-date-range-for-team
+                const historyUrl = `${PROXY}https://api.sportmonks.com/v3/football/fixtures?api_token=${SPORTMONKS_KEY}&filters=teamId:${teamId}&include=statistics.type&order=starting_at:desc`;
+                console.log(`📡 URL historii (NOWY ENDPOINT): ${historyUrl}`);
                 
                 const historyRes = await fetch(historyUrl);
                 
@@ -391,17 +392,26 @@
                 }
                 
                 const historyData = await historyRes.json();
-                console.log(`📦 Historia dla ${teamName}:`, historyData);
+                console.log(`📦 Historia dla ${teamName}:`, JSON.stringify(historyData).substring(0, 500));
+                console.log(`📦 Pełna struktura:`, historyData);
                 
-                if (!historyData.data || historyData.data.length === 0) {
+                // Sportmonks zwraca mecze w historyData.data
+                const fixtures = historyData.data || [];
+                
+                if (fixtures.length === 0) {
                     console.warn(`⚠️ Brak meczów w historii dla ${teamName}`);
+                    console.log(`⚠️ Response keys:`, Object.keys(historyData));
                     return { error: 'Brak historii meczów' };
                 }
                 
-                console.log(`📊 Znaleziono ${historyData.data.length} meczów w historii`);
+                console.log(`📊 Znaleziono ${fixtures.length} meczów w historii`);
                 
-                // Wyciągnij statystyki rożnych z ostatnich 5 meczów
-                const matches = historyData.data.slice(0, 5).map((match, index) => {
+                // Filtruj tylko zakończone mecze (state_id: 5 = finished)
+                const finishedFixtures = fixtures.filter(f => f.state_id === 5 || f.state_id === 6 || f.state_id === 7);
+                console.log(`✅ Zakończonych meczów: ${finishedFixtures.length}`);
+                
+                // Wyciągnij statystyki rożnych z ostatnich 5 ZAKOŃCZONYCH meczów
+                const matches = finishedFixtures.slice(0, 5).map((match, index) => {
                     console.log(`\n📋 Mecz ${index + 1}: ${match.name}`);
                     console.log(`   ID: ${match.id}, Data: ${match.starting_at}`);
                     
