@@ -320,11 +320,10 @@
                 console.log('📦 Odpowiedź o ligach:', data);
                 
                 if (data.data && data.data.length > 0) {
-                    console.log(`✅ Znaleziono ${data.data.length} lig w odpowiedzi`);
+                    console.log(`✅ Znaleziono ${data.data.length} lig w Twoim planie`);
                     
-                    // FILTRUJ TYLKO AKTYWNE LIGI
-                    const activeLeagues = data.data.filter(league => league.is_active === true || league.active === true);
-                    console.log(`🟢 Z tego ${activeLeagues.length} jest aktywnych`);
+                    // NIE FILTRUJEMY - pokazujemy WSZYSTKIE ligi z planu
+                    const allLeagues = data.data;
                     
                     // Wyświetl ligi w tabeli
                     const table = document.getElementById('predictions');
@@ -335,45 +334,38 @@
                         <th>Nazwa Ligi</th>
                         <th>Kraj</th>
                         <th>Typ</th>
-                        <th>Status</th>
                     </tr>`;
                     
-                    // Sortuj alfabetycznie
-                    const sortedLeagues = activeLeagues.sort((a, b) => 
-                        (a.name || '').localeCompare(b.name || '')
-                    );
+                    // Sortuj po kraju, potem po nazwie
+                    const sortedLeagues = allLeagues.sort((a, b) => {
+                        const countryA = a.country?.name || 'ZZZ';
+                        const countryB = b.country?.name || 'ZZZ';
+                        if (countryA !== countryB) return countryA.localeCompare(countryB);
+                        return (a.name || '').localeCompare(b.name || '');
+                    });
                     
-                    if (sortedLeagues.length === 0) {
-                        html += `<tr><td colspan="5" style="text-align:center; color:#ff5722;">
-                            ⚠️ WSZYSTKIE LIGI SĄ NIEAKTYWNE w Twoim planie!<br>
-                            To może oznaczać problem z API lub bardzo ograniczony plan.<br>
-                            Sprawdź szczegóły subskrypcji poniżej.
-                        </td></tr>`;
-                    }
-                    
-                    sortedLeagues.slice(0, 50).forEach(league => {
-                        const isActive = league.is_active ? '✅' : '❌';
+                    sortedLeagues.forEach(league => {
                         html += `<tr>
                             <td>${league.id}</td>
                             <td><strong>${league.name}</strong></td>
                             <td>${league.country?.name || '-'}</td>
                             <td>${league.type || '-'}</td>
-                            <td>${isActive}</td>
                         </tr>`;
                     });
                     
-                    if (activeLeagues.length > 50) {
-                        html += `<tr><td colspan="5" style="text-align:center; color:#ffa500;">
-                            Pokazano 50 z ${activeLeagues.length} aktywnych lig. Sprawdź konsolę (F12) aby zobaczyć wszystkie.
-                        </td></tr>`;
-                    }
-                    
                     table.innerHTML = html;
                     
+                    // Sprawdź czy są ważne ligi
+                    const hasPoland = allLeagues.some(l => l.name?.includes('Ekstraklasa'));
+                    const hasFACup = allLeagues.some(l => l.name?.includes('FA Cup'));
+                    const hasCarabao = allLeagues.some(l => l.name?.includes('Carabao'));
+                    
                     document.getElementById('info').innerHTML = `
-                        ✅ Znaleziono <strong>${activeLeagues.length} aktywnych lig</strong> (z ${data.data.length} w sumie)<br>
+                        ✅ Znaleziono <strong>${data.data.length} lig</strong> w Twoim planie Sportmonks<br>
                         <small style="color:#aaa;">
-                            ${activeLeagues.length === 0 ? '⚠️ Brak aktywnych lig! Problem z planem lub API.' : 'Sprawdź czy Puchar Polski/FA Cup są na liście'}
+                            ${hasPoland ? '✅ Ekstraklasa' : '❌ Brak Ekstraklasy'} | 
+                            ${hasFACup ? '✅ FA Cup' : '❌ Brak FA Cup'} | 
+                            ${hasCarabao ? '✅ Carabao Cup' : '❌ Brak Carabao Cup'}
                         </small>
                     `;
                     
