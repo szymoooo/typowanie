@@ -411,16 +411,22 @@
 
         // Funkcja do pokazywania/ukrywania szczegółów (MUSI BYĆ W WINDOW)
         window.toggleDetails = function(matchId) {
-            console.log('🔍 toggleDetails wywołane dla:', matchId);
+            console.log('🔍 toggleDetails wywołane dla:', matchId, 'typ:', typeof matchId);
             console.log('📦 Dostępne predictions:', predictions.length);
+            
+            // Konwertuj matchId na number (z HTML przychodzi jako string!)
+            const numericId = parseInt(matchId);
+            console.log('🔢 Konwersja ID:', matchId, '→', numericId);
+            
             const detailsRow = document.getElementById(`details-${matchId}`);
             if (detailsRow) {
+                console.log('🗑️ Zamykam szczegóły');
                 detailsRow.remove();
                 return;
             }
             
-            // Pobierz dane meczu
-            const match = predictions.find(p => p.id === matchId);
+            // Pobierz dane meczu (porównuj number z number!)
+            const match = predictions.find(p => p.id === numericId);
             if (!match) {
                 console.error('❌ Nie znaleziono meczu o ID:', matchId);
                 console.log('📋 Dostępne ID:', predictions.map(p => p.id));
