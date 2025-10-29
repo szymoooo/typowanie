@@ -379,10 +379,10 @@
                 const teamId = searchData.data[0].id;
                 console.log(`✅ Znaleziono drużynę ${teamName}, ID: ${teamId}`);
                 
-                // Pobierz ostatnie mecze drużyny - używam ALL FIXTURES i filtruję ręcznie
-                // Sportmonks v3 ma problemy z niektórymi filtrami, więc pobieramy wszystkie i filtrujemy lokalnie
-                const historyUrl = `${PROXY}https://api.sportmonks.com/v3/football/teams/${teamId}?api_token=${SPORTMONKS_KEY}&include=latest`;
-                console.log(`📡 URL historii (teams/${teamId}/latest): ${historyUrl}`);
+                // Pobierz ostatnie mecze drużyny ZE STATYSTYKAMI
+                // include=latest.statistics pobiera statystyki dla każdego meczu
+                const historyUrl = `${PROXY}https://api.sportmonks.com/v3/football/teams/${teamId}?api_token=${SPORTMONKS_KEY}&include=latest.statistics.type`;
+                console.log(`📡 URL historii (teams/${teamId}/latest+statistics): ${historyUrl}`);
                 
                 const historyRes = await fetch(historyUrl);
                 
