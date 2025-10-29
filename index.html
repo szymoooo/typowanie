@@ -224,6 +224,11 @@
                     // Odpowiedź nie jest JSON (prawdopodobnie HTML z błędem)
                     const textResponse = await smRes.text();
                     console.error('❌ Odpowiedź NIE JEST JSON:', textResponse.substring(0, 200));
+                    
+                    if (smRes.status === 403) {
+                        throw new Error('⛔ CORS Proxy (corsproxy.io) zablokowany przez Cloudflare! Spróbuj za 5-10 minut lub użyj VPN.');
+                    }
+                    
                     throw new Error(`Sportmonks zwróciło ${smRes.status}: ${textResponse.substring(0, 100)}`);
                 }
                 console.log('📦 Sportmonks PEŁNA ODPOWIEDŹ:', JSON.stringify(smData, null, 2));
@@ -352,9 +357,19 @@
         // Funkcja do pobierania historii meczów drużyny
         async function getTeamHistory(teamName, fixtureId) {
             try {
+                console.log(`🔍 Szukam historii dla: ${teamName}`);
+                
                 // Szukaj drużyny po nazwie
                 const searchUrl = `${PROXY}https://api.sportmonks.com/v3/football/teams/search/${encodeURIComponent(teamName)}?api_token=${SPORTMONKS_KEY}`;
+                console.log(`📡 URL szukania drużyny: ${searchUrl}`);
+                
                 const searchRes = await fetch(searchUrl);
+                
+                if (!searchRes.ok) {
+                    console.error(`❌ Błąd ${searchRes.status} przy szukaniu drużyny`);
+                    return { error: `Błąd API (${searchRes.status})` };
+                }
+                
                 const searchData = await searchRes.json();
                 
                 if (!searchData.data || searchData.data.length === 0) {
@@ -394,8 +409,10 @@
             }
         }
 
-        // Funkcja do pokazywania/ukrywania szczegółów
-        function toggleDetails(matchId) {
+        // Funkcja do pokazywania/ukrywania szczegółów (MUSI BYĆ W WINDOW)
+        window.toggleDetails = function(matchId) {
+            console.log('🔍 toggleDetails wywołane dla:', matchId);
+            console.log('📦 Dostępne predictions:', predictions.length);
             const detailsRow = document.getElementById(`details-${matchId}`);
             if (detailsRow) {
                 detailsRow.remove();
@@ -404,7 +421,12 @@
             
             // Pobierz dane meczu
             const match = predictions.find(p => p.id === matchId);
-            if (!match) return;
+            if (!match) {
+                console.error('❌ Nie znaleziono meczu o ID:', matchId);
+                console.log('📋 Dostępne ID:', predictions.map(p => p.id));
+                return;
+            }
+            console.log('✅ Znaleziono mecz:', match);
             
             // Dodaj wiersz ze szczegółami
             const mainRow = document.querySelector(`#s-${matchId}`).closest('tr');
@@ -458,7 +480,7 @@
                 
                 newRow.querySelector('.details-content').innerHTML = html;
             });
-        }
+        };
 
         async function checkAvailableLeagues() {
             document.getElementById('loader').style.display = 'inline-block';
