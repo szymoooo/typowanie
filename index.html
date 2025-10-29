@@ -859,7 +859,7 @@
                         skippedCount++;
                         // Loguj tylko pierwsze 3 przykłady, żeby nie spamować konsoli
                         if (skippedCount <= 3) {
-                            console.warn(`⚠️ Liga bez ID (index ${index}):`, league);
+                        console.warn(`⚠️ Liga bez ID (index ${index}):`, league);
                         }
                     }
                 });
@@ -1166,7 +1166,8 @@
                     return shouldShow;
                 });
                 
-                console.log(`✅ FootyStats: Po filtrowaniu zostało ${matches.length} meczów z dnia ${today} (z ${allMatches.length} pobranych)`);
+                console.log(`✅ FootyStats: Po filtrowaniu zostało ${matches.length} meczów (z ${allMatches.length} pobranych)`);
+                console.log(`   📅 Mecze z dziś + LIVE + zakończone z ostatnich 24h`);
                     console.log(`🌍 Data lokalna użytkownika: ${new Date().toLocaleString('pl-PL')}`);
                     
                 // ✅ KROK: Pobierz nazwy lig dla wszystkich ID które nie są w mapie
@@ -1297,14 +1298,14 @@
                             if (match.homeGoalCount !== undefined && match.awayGoalCount !== undefined) {
                                 time = `✅ KONIEC (${match.homeGoalCount}:${match.awayGoalCount})`;
                             } else {
-                                time = '✅ KONIEC';
+                            time = '✅ KONIEC';
                             }
                         } else if (isLive) {
                             // Pokaż wynik jeśli są bramki
                             if (match.homeGoalCount !== undefined && match.awayGoalCount !== undefined) {
                                 time = `🔴 LIVE (${match.homeGoalCount}:${match.awayGoalCount})`;
                             } else {
-                                time = '🔴 LIVE';
+                            time = '🔴 LIVE';
                             }
                         } else {
                             if (match.date_unix) {
