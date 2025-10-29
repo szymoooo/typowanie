@@ -723,10 +723,23 @@
                     const matches = data.data;
                     console.log(`✅ FootyStats: Znaleziono ${matches.length} meczów`);
                     
+                    // DEBUG: Sprawdź strukturę pierwszego meczu
+                    if (matches.length > 0) {
+                        console.log('📊 STRUKTURA PIERWSZEGO MECZU (FootyStats):', matches[0]);
+                        console.log('📊 Wszystkie klucze meczu:', Object.keys(matches[0]));
+                    }
+                    
                     // Zlicz unikalne ligi
                     const uniqueLeagues = new Set();
                     matches.forEach(match => {
-                        const leagueName = match.competition_name || match.league || 'Unknown';
+                        // Próbuj różne warianty nazwy ligi
+                        const leagueName = match.competition?.name || 
+                                          match.competition_name || 
+                                          match.league?.name ||
+                                          match.league_name ||
+                                          match.league || 
+                                          match.competition ||
+                                          'Unknown';
                         uniqueLeagues.add(leagueName);
                     });
                     
@@ -742,18 +755,24 @@
                     
                     // Sortuj po lidze, potem po godzinie
                     const sortedMatches = matches.sort((a, b) => {
-                        const leagueA = a.competition_name || a.league || 'ZZZ';
-                        const leagueB = b.competition_name || b.league || 'ZZZ';
+                        const leagueA = a.competition?.name || a.competition_name || a.league?.name || a.league_name || a.league || a.competition || 'ZZZ';
+                        const leagueB = b.competition?.name || b.competition_name || b.league?.name || b.league_name || b.league || b.competition || 'ZZZ';
                         if (leagueA !== leagueB) return leagueA.localeCompare(leagueB);
                         return (a.date_unix || 0) - (b.date_unix || 0);
                     });
                     
                     sortedMatches.forEach(match => {
                         // Parsuj nazwę meczu
-                        const homeName = match.home_name || match.homeTeam || 'Unknown';
-                        const awayName = match.away_name || match.awayTeam || 'Unknown';
+                        const homeName = match.home_name || match.home?.name || match.homeTeam || 'Unknown';
+                        const awayName = match.away_name || match.away?.name || match.awayTeam || 'Unknown';
                         const matchName = `${homeName} vs ${awayName}`;
-                        const leagueName = match.competition_name || match.league || 'Unknown League';
+                        const leagueName = match.competition?.name || 
+                                          match.competition_name || 
+                                          match.league?.name ||
+                                          match.league_name ||
+                                          match.league || 
+                                          match.competition ||
+                                          'Unknown League';
                         
                         // Parsuj godzinę
                         let time = '-';
@@ -782,7 +801,10 @@
                     // Wyświetl szczegóły w konsoli
                     console.log('📋 WSZYSTKIE MECZE (FootyStats):');
                     uniqueLeagues.forEach(league => {
-                        const leagueMatches = matches.filter(m => (m.competition_name || m.league) === league);
+                        const leagueMatches = matches.filter(m => {
+                            const ln = m.competition?.name || m.competition_name || m.league?.name || m.league_name || m.league || m.competition || 'Unknown';
+                            return ln === league;
+                        });
                         console.log(`${league}: ${leagueMatches.length} meczów`);
                     });
                     
