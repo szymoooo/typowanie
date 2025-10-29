@@ -213,14 +213,22 @@
                         console.log('🚀 Away team:', firstMatch.away_team || firstMatch.visitorteam || firstMatch.teams);
                         console.log('🏆 Liga:', firstMatch.league || firstMatch.league_id);
                         
-                        fixtures = smData.data.slice(0, 30).map(fix => ({
-                            fixture: { id: fix.id },
-                            teams: {
-                                home: { name: fix.home_team?.name || fix.localteam?.name || fix.participants?.[0]?.name || 'Unknown' },
-                                away: { name: fix.away_team?.name || fix.visitorteam?.name || fix.participants?.[1]?.name || 'Unknown' }
-                            },
-                            league: { name: fix.league?.name || fix.league_id || 'Unknown' }
-                        }));
+                        fixtures = smData.data.slice(0, 30).map(fix => {
+                            // Parsuj pole "name" które ma format "Team1 vs Team2"
+                            const matchName = fix.name || '';
+                            const teams = matchName.split(' vs ');
+                            const homeName = teams[0]?.trim() || 'Unknown';
+                            const awayName = teams[1]?.trim() || 'Unknown';
+                            
+                            return {
+                                fixture: { id: fix.id },
+                                teams: {
+                                    home: { name: homeName },
+                                    away: { name: awayName }
+                                },
+                                league: { name: `Liga ID: ${fix.league_id}` }
+                            };
+                        });
                     }
                 } else {
                     console.error('❌ Sportmonks błąd:', smRes.status, smRes.statusText);
