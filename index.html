@@ -67,11 +67,8 @@
 
         <div class="buttons">
             <button onclick="loadTodayMatches()">SZUKAJ MECZÓW NA DZIŚ</button>
-            <button onclick="loadMatchesForDate(1)">JUTRO</button>
-            <button onclick="loadMatchesForDate(-1)">WCZORAJ</button>
             <button onclick="checkAvailableLeagues()">SPRAWDŹ LIGI (Sportmonks)</button>
             <button onclick="checkFootyStatsLeagues()">SPRAWDŹ LIGI (FootyStats)</button>
-            <button onclick="verifyAll()">SPRAWDŹ WYNIKI</button>
         </div>
 
         <p id="info">Kliknij przycisk, by pobrać mecze na dziś...</p>
@@ -88,8 +85,8 @@
             </tr>
         </table>
 
-        <div id="stats">Hit Rate: — | ROI: —</div>
-        <canvas id="chart"></canvas>
+        <div id="stats" style="display:none;">Hit Rate: — | ROI: —</div>
+        <canvas id="chart" style="display:none;"></canvas>
 
         <footer>
             <p>CornersBot v12 © 2025 | 6 źródeł | corsproxy.io</p>
@@ -197,7 +194,7 @@
 
         async function loadMatchesForDate(daysOffset = 0) {
             document.getElementById('loader').style.display = 'inline-block';
-            document.getElementById('info').textContent = '🔧 DEBUG: Testuję tylko Sportmonks API...';
+            document.getElementById('info').textContent = '🔍 Wyszukuję mecze...';
             document.getElementById('predictions').style.display = 'none';
             predictions = [];
 
@@ -207,14 +204,14 @@
                 const dateStr = date.toISOString().split('T')[0];
                 
                 console.log('🔍 Pobieranie meczów na:', dateStr);
-                console.log('⚠️ API-FOOTBALL TYMCZASOWO WYŁĄCZONE - używam Sportmonks');
-                document.getElementById('api-status').innerHTML = '⚠️ <strong>API-Football wyłączone (test)</strong> - używam Sportmonks';
+                console.log('📡 Źródła: Sportmonks + FootyStats');
+                document.getElementById('api-status').innerHTML = '📡 <strong>Sportmonks + FootyStats</strong> aktywne';
                 
-                // TYMCZASOWO: Od razu używaj Sportmonks zamiast API-Football
+                // Używaj Sportmonks jako głównego źródła meczów
                 let fixtures = null;
                 
-                // Próbuj Sportmonks jako główne źródło
-                console.log('🔄 Używam Sportmonks jako głównego źródła...');
+                // Pobierz mecze ze Sportmonks
+                console.log('🔄 Pobieranie z Sportmonks...');
                 
                 // UŻYWAMY PROXY (bezpośrednie połączenie blokuje CORS)
                 // DODANO: include=league żeby pobrać nazwę ligi
