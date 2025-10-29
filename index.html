@@ -185,22 +185,19 @@
                 // Próbuj Sportmonks jako główne źródło
                 console.log('🔄 Używam Sportmonks jako głównego źródła...');
                 
-                // PRÓBA 1: BEZ PROXY (może CORS działa bezpośrednio)
+                // UŻYWAMY PROXY (bezpośrednie połączenie blokuje CORS)
                 // DODANO: include=league żeby pobrać nazwę ligi
-                const sportmonksUrlDirect = `https://api.sportmonks.com/v3/football/fixtures/date/${dateStr}?api_token=${SPORTMONKS_KEY}&include=league`;
-                console.log('📡 Sportmonks URL (BEZPOŚREDNIO, z league):', sportmonksUrlDirect);
+                const sportmonksUrl = `${PROXY}https://api.sportmonks.com/v3/football/fixtures/date/${dateStr}?api_token=${SPORTMONKS_KEY}&include=league`;
+                console.log('📡 Sportmonks URL (przez PROXY, z league):', sportmonksUrl);
                 console.log('📅 Data szukania:', dateStr);
                 
-                let smRes = await fetch(sportmonksUrlDirect);
-                console.log('📝 Sportmonks Status (direct):', smRes.status);
-                
-                // Jeśli CORS blokuje, spróbuj z proxy
-                if (!smRes.ok && smRes.status === 0) {
-                    console.log('🔄 CORS zablokował - próbuję z proxy...');
-                    const sportmonksUrlProxy = `${PROXY}https://api.sportmonks.com/v3/football/fixtures/date/${dateStr}?api_token=${SPORTMONKS_KEY}&include=league`;
-                    console.log('📡 Sportmonks URL (PROXY, z league):', sportmonksUrlProxy);
-                    smRes = await fetch(sportmonksUrlProxy);
-                    console.log('📝 Sportmonks Status (proxy):', smRes.status);
+                let smRes;
+                try {
+                    smRes = await fetch(sportmonksUrl);
+                    console.log('📝 Sportmonks Status:', smRes.status);
+                } catch (fetchError) {
+                    console.error('❌ Błąd połączenia:', fetchError);
+                    throw new Error('Nie można połączyć się z API: ' + fetchError.message);
                 }
                 
                 console.log('📝 Sportmonks Status Text:', smRes.statusText);
