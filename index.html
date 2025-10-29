@@ -1026,58 +1026,37 @@
                 // KROK 2: Pobierz dzisiejsze mecze z FootyStats - WSZYSTKIE (zakończone + trwające + przyszłe)
                 const today = new Date().toISOString().split('T')[0];
                 
-                // Próbuj różnych endpointów aby dostać WSZYSTKIE mecze (nie tylko incomplete)
-                const url1 = `${PROXY}https://api.football-data-api.com/todays-matches?key=${FOOTYSTATS_KEY}`;
-                const url2 = `${PROXY}https://api.football-data-api.com/matches?key=${FOOTYSTATS_KEY}&date=${today}`;
+                // Użyj endpoint /todays-matches (endpoint /matches?date= nie istnieje w API)
+                const url = `${PROXY}https://api.football-data-api.com/todays-matches?key=${FOOTYSTATS_KEY}`;
                 
                 console.log('📡 FootyStats - pobieranie meczów na:', today);
-                console.log('   TEST 1 (todays-matches):', url1);
-                console.log('   TEST 2 (matches?date=):', url2);
+                console.log('   Endpoint:', url);
                 
-                // Próbuj endpoint z datą
-                let res = await fetch(url2);
+                // Pobierz mecze z /todays-matches
+                const res = await fetch(url);
                 
                 // Sprawdź status i contentType przed parsowaniem
-                let data = null;
-                if (res.ok) {
-                    const contentType = res.headers.get('content-type');
-                    if (contentType && contentType.includes('application/json')) {
-                        try {
-                            data = await res.json();
-                        } catch (e) {
-                            console.warn('⚠️ Błąd parsowania JSON z TEST 2:', e.message);
-                            data = null;
-                        }
-                    }
+                if (!res.ok) {
+                    console.error(`❌ FootyStats zwrócił status ${res.status}`);
+                    throw new Error(`Nie można pobrać meczów z FootyStats (HTTP ${res.status})`);
                 }
                 
-                console.log('📦 TEST 2 - Status:', res.status, '| Odpowiedź:', data ? 'OK' : 'BRAK DANYCH');
+                const contentType = res.headers.get('content-type');
+                if (!contentType || !contentType.includes('application/json')) {
+                    const textResponse = await res.text();
+                    console.error('❌ FootyStats zwrócił nie-JSON:', textResponse.substring(0, 200));
+                    throw new Error('Nie można pobrać meczów z FootyStats (odpowiedź nie jest JSON)');
+                }
                 
-                // Jeśli nie działa, użyj standardowego
-                if (!data || !data.data || data.data.length === 0 || data.success === false) {
-                    console.log('⚠️ TEST 2 nie działa, próbuję TEST 1...');
-                    res = await fetch(url1);
-                    
-                    if (res.ok) {
-                        const contentType = res.headers.get('content-type');
-                        if (contentType && contentType.includes('application/json')) {
-                            try {
+                let data;
+                try {
                     data = await res.json();
-                            } catch (e) {
-                                console.error('❌ Błąd parsowania JSON z TEST 1:', e.message);
-                                throw new Error('Nie można pobrać meczów z FootyStats (błąd parsowania JSON)');
-                            }
-                        } else {
-                            const textResponse = await res.text();
-                            console.error('❌ TEST 1 zwrócił nie-JSON:', textResponse.substring(0, 200));
-                            throw new Error('Nie można pobrać meczów z FootyStats (odpowiedź nie jest JSON)');
-                        }
-                    } else {
-                        console.error(`❌ TEST 1 zwrócił status ${res.status}`);
-                        throw new Error(`Nie można pobrać meczów z FootyStats (HTTP ${res.status})`);
-                    }
-                    console.log('📦 TEST 1 - Odpowiedź FootyStats (todays-matches):', data ? 'OK' : 'BRAK DANYCH');
+                } catch (e) {
+                    console.error('❌ Błąd parsowania JSON z FootyStats:', e.message);
+                    throw new Error('Nie można pobrać meczów z FootyStats (błąd parsowania JSON)');
                 }
+                
+                console.log('📦 FootyStats - odpowiedź OK');
                 
                 if (!data || !data.data || !Array.isArray(data.data) || data.data.length === 0) {
                     throw new Error('Brak danych meczów w odpowiedzi FootyStats');
