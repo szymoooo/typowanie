@@ -63,12 +63,11 @@
 <body>
     <div class="container">
         <h1>Corners Predictor <span id="version">v1.01</span> <span id="loader" class="loader" style="display:none;"></span></h1>
-        <p class="subtitle">✅ Sportmonks + FootyStats WŁĄCZONE - 50+ lig dostępnych!</p>
+        <p class="subtitle">✅ Sportmonks + FootyStats WŁĄCZONE - Podwójna weryfikacja danych!</p>
 
         <div class="buttons">
             <button onclick="loadTodayMatches()">SZUKAJ MECZÓW NA DZIŚ</button>
-            <button onclick="checkAvailableLeagues()">SPRAWDŹ LIGI (Sportmonks)</button>
-            <button onclick="checkFootyStatsLeagues()">SPRAWDŹ LIGI (FootyStats)</button>
+            <button onclick="checkAvailableLeagues()">SPRAWDŹ DOSTĘPNE LIGI</button>
         </div>
 
         <p id="info">Kliknij przycisk, by pobrać mecze na dziś...</p>
@@ -669,7 +668,8 @@
                             ${hasPoland ? '✅ Ekstraklasa' : '❌ Brak Ekstraklasy'} | 
                             ${hasFACup ? '✅ FA Cup' : '❌ Brak FA Cup'} | 
                             ${hasCarabao ? '✅ Carabao Cup' : '❌ Brak Carabao Cup'}
-                        </small>
+                        </small><br>
+                        <small style="color:#888;">ℹ️ FootyStats nie ma endpointu do listowania lig, ale <strong>działa dla analizy prawdopodobieństw</strong> każdego meczu</small>
                     `;
                     
                     // Wyświetl szczegóły w konsoli
@@ -716,96 +716,9 @@
             document.getElementById('loader').style.display = 'none';
         }
 
-        async function checkFootyStatsLeagues() {
-            document.getElementById('loader').style.display = 'inline-block';
-            document.getElementById('info').textContent = '🔍 Sprawdzam dostępne ligi w FootyStats...';
-            
-            try {
-                // FootyStats - sprawdź dostępne ligi (MUSI BYĆ PRZEZ PROXY!)
-                const url = `${PROXY}https://api.footystats.org/leagues?key=${FOOTYSTATS_KEY}`;
-                console.log('📡 FootyStats URL:', url);
-                
-                const res = await fetch(url);
-                
-                if (!res.ok) {
-                    console.error(`❌ FootyStats błąd HTTP ${res.status}: ${res.statusText}`);
-                    const text = await res.text();
-                    console.error('📄 Odpowiedź:', text.substring(0, 500));
-                    throw new Error(`HTTP ${res.status}: ${res.statusText}`);
-                }
-                
-                const data = await res.json();
-                
-                console.log('📦 Odpowiedź FootyStats (pełna):', data);
-                console.log('📊 Typ danych:', typeof data, Array.isArray(data) ? '(array)' : '(object)');
-                
-                // FootyStats może zwracać różne struktury
-                let leagues = [];
-                if (data.data && Array.isArray(data.data)) {
-                    leagues = data.data;
-                    console.log(`✅ Znaleziono ${leagues.length} lig w data.data`);
-                } else if (Array.isArray(data)) {
-                    leagues = data;
-                    console.log(`✅ Znaleziono ${leagues.length} lig w root array`);
-                } else {
-                    console.error('❌ Nieznana struktura odpowiedzi FootyStats:', Object.keys(data));
-                }
-                
-                if (leagues.length > 0) {
-                    // Wyświetl ligi w tabeli
-                    const table = document.getElementById('predictions');
-                    table.style.display = 'table';
-                    
-                    let html = `<tr>
-                        <th>ID</th>
-                        <th>Nazwa Ligi</th>
-                        <th>Kraj</th>
-                        <th>Sezon</th>
-                    </tr>`;
-                    
-                    // Sortuj po kraju, potem po nazwie
-                    const sortedLeagues = leagues.sort((a, b) => {
-                        const countryA = a.country?.name || a.country || 'ZZZ';
-                        const countryB = b.country?.name || b.country || 'ZZZ';
-                        if (countryA !== countryB) return countryA.localeCompare(countryB);
-                        return (a.name || '').localeCompare(b.name || '');
-                    });
-                    
-                    sortedLeagues.forEach(league => {
-                        html += `<tr>
-                            <td>${league.id || '-'}</td>
-                            <td><strong>${league.name || 'Unknown'}</strong></td>
-                            <td>${league.country?.name || league.country || '-'}</td>
-                            <td>${league.season || '-'}</td>
-                        </tr>`;
-                    });
-                    
-                    table.innerHTML = html;
-                    
-                    document.getElementById('info').innerHTML = `
-                        ✅ Znaleziono <strong>${leagues.length} lig</strong> w FootyStats<br>
-                        <small style="color:#aaa;">To więcej niż Sportmonks! FootyStats może być lepszym głównym źródłem.</small>
-                    `;
-                    
-                    // Wyświetl szczegóły w konsoli
-                    console.log('📋 WSZYSTKIE DOSTĘPNE LIGI (FootyStats):');
-                    leagues.forEach((league, index) => {
-                        console.log(`${index + 1}. [${league.id}] ${league.name} (${league.country?.name || league.country})`);
-                    });
-                } else {
-                    document.getElementById('info').textContent = '❌ Brak dostępnych lig w FootyStats API';
-                    console.error('⚠️ Brak lig w odpowiedzi. Sprawdź strukturę:', data);
-                    console.error('💡 Możliwe przyczyny: nieprawidłowy klucz API, inny format odpowiedzi, brak subskrypcji');
-                }
-                
-            } catch (e) {
-                console.error('💥 BŁĄD podczas sprawdzania lig FootyStats:', e);
-                document.getElementById('info').textContent = 'Błąd: ' + e.message;
-            }
-            
-            document.getElementById('loader').style.display = 'none';
-        }
-
+        // FootyStats nie ma endpointu /leagues - API zwraca 404
+        // FootyStats działa tylko dla analizy konkretnych meczów/drużyn
+        // Listowanie lig dostępne tylko w Sportmonks
 
         // Helper: opóźnienie
         const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
