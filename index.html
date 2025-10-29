@@ -759,20 +759,40 @@
             
             console.log('📦 Odpowiedź /league-list (ilość lig w odpowiedzi):', data.data?.length || 0);
             
+            // DEBUG: Sprawdź strukturę pierwszych 3 lig
+            if (data.data && data.data.length > 0) {
+                console.log('🔍 STRUKTURA PIERWSZEJ LIGI:', data.data[0]);
+                console.log('🔍 Klucze pierwszej ligi:', Object.keys(data.data[0]));
+                console.log('🔍 ID pierwszej ligi:', data.data[0].id);
+                console.log('🔍 Nazwa pierwszej ligi:', data.data[0].name);
+                console.log('🔍 Kraj pierwszej ligi:', data.data[0].country);
+            }
+            
             if (data.data && Array.isArray(data.data)) {
                 // Stwórz mapę ID -> nazwa ligi (z krajem)
                 footyStatsLeagues = {};
-                data.data.forEach(league => {
+                data.data.forEach((league, index) => {
                     const leagueId = league.id;
                     const leagueName = league.name || 'Unknown';
                     const countryName = league.country || '';
                     const fullName = countryName ? `${leagueName} (${countryName})` : leagueName;
-                    footyStatsLeagues[leagueId] = fullName;
+                    
+                    // DEBUG: Pierwsze 5 lig
+                    if (index < 5) {
+                        console.log(`Liga ${index + 1}: ID=${leagueId}, Name=${leagueName}, Country=${countryName}`);
+                    }
+                    
+                    if (leagueId) {
+                        footyStatsLeagues[leagueId] = fullName;
+                    } else {
+                        console.warn(`⚠️ Liga bez ID (index ${index}):`, league);
+                    }
                 });
                 console.log(`✅ Załadowano ${Object.keys(footyStatsLeagues).length} lig FootyStats do mapy`);
                 console.log('📊 Przykładowe ligi (pierwsze 10):', Object.entries(footyStatsLeagues).slice(0, 10));
                 console.log('📊 Czy liga 14932 jest w mapie?', footyStatsLeagues[14932]);
                 console.log('📊 Czy liga 16009 jest w mapie?', footyStatsLeagues[16009]);
+                console.log('📊 Czy liga 16112 jest w mapie?', footyStatsLeagues[16112]);
             } else {
                 console.error('❌ Błąd podczas pobierania lig:', data);
                 footyStatsLeagues = {};
