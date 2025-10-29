@@ -741,15 +741,30 @@
             document.getElementById('info').textContent = '🔍 Pobieranie dzisiejszych meczów z FootyStats...';
             
             try {
-                // Pobierz dzisiejsze mecze z FootyStats
+                // Pobierz dzisiejsze mecze z FootyStats - WSZYSTKIE (zakończone + trwające + przyszłe)
                 const today = new Date().toISOString().split('T')[0];
-                const url = `${PROXY}https://api.football-data-api.com/todays-matches?key=${FOOTYSTATS_KEY}`;
-                console.log('📡 FootyStats - pobieranie meczów na:', today, url);
                 
-                const res = await fetch(url);
-                const data = await res.json();
+                // Próbuj różnych endpointów aby dostać WSZYSTKIE mecze (nie tylko incomplete)
+                const url1 = `${PROXY}https://api.football-data-api.com/todays-matches?key=${FOOTYSTATS_KEY}`;
+                const url2 = `${PROXY}https://api.football-data-api.com/matches?key=${FOOTYSTATS_KEY}&date=${today}`;
                 
-                console.log('📦 Odpowiedź FootyStats:', data);
+                console.log('📡 FootyStats - pobieranie meczów na:', today);
+                console.log('   TEST 1 (todays-matches):', url1);
+                console.log('   TEST 2 (matches?date=):', url2);
+                
+                // Próbuj endpoint z datą
+                let res = await fetch(url2);
+                let data = await res.json();
+                
+                console.log('📦 TEST 2 - Odpowiedź FootyStats (matches?date=):', data);
+                
+                // Jeśli nie działa, użyj standardowego
+                if (!data.data || data.data.length === 0 || data.success === false) {
+                    console.log('⚠️ TEST 2 nie działa, próbuję TEST 1...');
+                    res = await fetch(url1);
+                    data = await res.json();
+                    console.log('📦 TEST 1 - Odpowiedź FootyStats (todays-matches):', data);
+                }
                 
                 if (data.data && Array.isArray(data.data) && data.data.length > 0) {
                     let allMatches = data.data;
@@ -759,10 +774,18 @@
                     if (allMatches.length > 0) {
                         console.log('📊 STRUKTURA PIERWSZEGO MECZU (FootyStats):', allMatches[0]);
                         console.log('📊 Wszystkie klucze meczu:', Object.keys(allMatches[0]));
-                        console.log('🏆 Nazwa ligi - competition:', allMatches[0].competition);
-                        console.log('🏆 Nazwa ligi - league:', allMatches[0].league);
-                        console.log('🏆 Nazwa ligi - competition_name:', allMatches[0].competition_name);
-                        console.log('🏆 Nazwa ligi - league_name:', allMatches[0].league_name);
+                        
+                        // Szukaj pól z "league", "competition", "country" w nazwie
+                        const leagueKeys = Object.keys(allMatches[0]).filter(key => 
+                            key.toLowerCase().includes('league') || 
+                            key.toLowerCase().includes('competition') ||
+                            key.toLowerCase().includes('country')
+                        );
+                        console.log('🏆 Klucze zawierające "league/competition/country":', leagueKeys);
+                        leagueKeys.forEach(key => {
+                            console.log(`   ${key}:`, allMatches[0][key]);
+                        });
+                        
                         console.log('⚽ Status meczu - status:', allMatches[0].status);
                         console.log('⚽ Status meczu - match_status:', allMatches[0].match_status);
                         console.log('⚽ Finished:', allMatches[0].finished);
@@ -841,9 +864,17 @@
                         const status = match.status || match.match_status || '';
                         const isFinished = status === 'complete' || 
                                           status === 'finished' || 
-                                          status === 'FT' || 
-                                          match.finished === true;
-                        const isLive = status === 'live' || status === 'inplay' || status === 'LIVE';
+                                          status === 'FT';
+                        
+                        // Mecz LIVE jeśli:
+                        // 1. Status jawnie to mówi
+                        // 2. Status 'incomplete' + mecz już się rozpoczął (date_unix < teraz) + jest min. 5 min po starcie
+                        const now = Math.floor(Date.now() / 1000);
+                        const matchStarted = match.date_unix && (now > match.date_unix + 300); // 5 min po starcie
+                        const isLive = status === 'live' || 
+                                      status === 'inplay' || 
+                                      status === 'LIVE' ||
+                                      (status === 'incomplete' && matchStarted);
                         
                         // Parsuj godzinę lub status
                         let time = '-';
