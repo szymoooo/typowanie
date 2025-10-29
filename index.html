@@ -28,7 +28,10 @@
             width: 100%; max-width: 1200px; margin: 25px auto; border-collapse: collapse;
             background: #1a1a2e; border-radius: 12px; overflow: hidden;
             box-shadow: 0 8px 20px rgba(0,0,0,0.4);
+            display: block; max-height: 600px; overflow-y: auto;
         }
+        table thead { position: sticky; top: 0; background: #16213e; z-index: 10; }
+        table tbody { display: table; width: 100%; }
         th { background: #16213e; padding: 16px; font-weight: bold; text-transform: uppercase; font-size: 0.9em; }
         td { padding: 14px; border-bottom: 1px solid #333; }
         tr:hover { background: #222840; }
@@ -219,22 +222,53 @@
                 }
                 console.log('📦 Sportmonks PEŁNA ODPOWIEDŹ:', JSON.stringify(smData, null, 2));
                 
+                // Sprawdź pagination
+                if (smData.pagination) {
+                    console.log('📄 PAGINATION:', smData.pagination);
+                    console.log(`   Strona: ${smData.pagination.current_page}/${smData.pagination.last_page}`);
+                    console.log(`   Razem: ${smData.pagination.total} meczów`);
+                }
+                
                 if (smRes.ok) {
                     console.log('✅ Sportmonks odpowiedź OK');
                     console.log('📊 Struktura odpowiedzi:', Object.keys(smData));
                     
                     if (smData.data && smData.data.length > 0) {
-                        console.log(`✅ [Sportmonks] Znaleziono ${smData.data.length} meczów`);
-                        console.log('📋 Przykładowy mecz (pierwszy):', smData.data[0]);
-                        console.log('🔑 Klucze meczu:', Object.keys(smData.data[0]));
+                        console.log(`✅ [Sportmonks] Znaleziono ${smData.data.length} meczów na tej stronie`);
+                        
+                        // Sprawdź czy są kolejne strony
+                        let allFixtures = [...smData.data];
+                        const totalPages = smData.pagination?.last_page || 1;
+                        const currentPage = smData.pagination?.current_page || 1;
+                        
+                        if (totalPages > 1) {
+                            console.log(`📄 Wykryto ${totalPages} stron - pobieram wszystkie...`);
+                            document.getElementById('info').textContent = `Pobieranie ${smData.pagination.total} meczów z ${totalPages} stron...`;
+                            
+                            // Pobierz pozostałe strony (max 5 stron = ~200 meczów)
+                            for (let page = 2; page <= Math.min(totalPages, 5); page++) {
+                                const pageUrl = `${PROXY}https://api.sportmonks.com/v3/football/fixtures/date/${dateStr}?api_token=${SPORTMONKS_KEY}&include=league&page=${page}`;
+                                console.log(`📄 Pobieram stronę ${page}/${totalPages}...`);
+                                const pageRes = await fetch(pageUrl);
+                                const pageData = await pageRes.json();
+                                if (pageData.data) {
+                                    allFixtures = [...allFixtures, ...pageData.data];
+                                    console.log(`   ✅ +${pageData.data.length} meczów (razem: ${allFixtures.length})`);
+                                }
+                            }
+                        }
+                        
+                        console.log(`✅ RAZEM pobrano ${allFixtures.length} meczów`);
+                        console.log('📋 Przykładowy mecz (pierwszy):', allFixtures[0]);
+                        console.log('🔑 Klucze meczu:', Object.keys(allFixtures[0]));
                         
                         // Sprawdźmy strukturę pierwszego meczu
-                        const firstMatch = smData.data[0];
+                        const firstMatch = allFixtures[0];
                         console.log('🏠 Home team:', firstMatch.home_team || firstMatch.localteam || firstMatch.teams);
                         console.log('🚀 Away team:', firstMatch.away_team || firstMatch.visitorteam || firstMatch.teams);
                         console.log('🏆 Liga:', firstMatch.league || firstMatch.league_id);
                         
-                        fixtures = smData.data.slice(0, 30).map(fix => {
+                        fixtures = allFixtures.map(fix => {
                             // Parsuj pole "name" które ma format "Team1 vs Team2"
                             const matchName = fix.name || '';
                             const teams = matchName.split(' vs ');
@@ -289,7 +323,11 @@
                 }
                 
                 console.log(`⚽ Znaleziono ${fixtures.length} meczów ze Sportmonks`);
-                document.getElementById('api-status').innerHTML = '✅ <strong>Sportmonks działa poprawnie</strong> (API-Football wyłączone do testu)';
+                if (fixtures.length > 50) {
+                    document.getElementById('api-status').innerHTML = `✅ <strong>Sportmonks działa poprawnie</strong> (API-Football wyłączone) | Pobrano ${fixtures.length} meczów - tabela ma scrollowanie`;
+                } else {
+                    document.getElementById('api-status').innerHTML = '✅ <strong>Sportmonks działa poprawnie</strong> (API-Football wyłączone do testu)';
+                }
                 
                 // Przetwórz mecze ze Sportmonks
                 await processFixtures(fixtures);
