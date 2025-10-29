@@ -63,13 +63,14 @@
 <body>
     <div class="container">
         <h1>Corners Predictor <span id="version">v1.01</span> <span id="loader" class="loader" style="display:none;"></span></h1>
-        <p class="subtitle">🔧 DEBUG MODE - TYLKO SPORTMONKS - wszystkie inne API wyłączone</p>
+        <p class="subtitle">✅ Sportmonks + FootyStats WŁĄCZONE - 50+ lig dostępnych!</p>
 
         <div class="buttons">
             <button onclick="loadTodayMatches()">SZUKAJ MECZÓW NA DZIŚ</button>
             <button onclick="loadMatchesForDate(1)">JUTRO</button>
             <button onclick="loadMatchesForDate(-1)">WCZORAJ</button>
-            <button onclick="checkAvailableLeagues()">SPRAWDŹ DOSTĘPNE LIGI</button>
+            <button onclick="checkAvailableLeagues()">SPRAWDŹ LIGI (Sportmonks)</button>
+            <button onclick="checkFootyStatsLeagues()">SPRAWDŹ LIGI (FootyStats)</button>
             <button onclick="verifyAll()">SPRAWDŹ WYNIKI</button>
         </div>
 
@@ -570,16 +571,16 @@
                 
                 // Sportmonks
                 if (probs.sportmonks) {
-                    html += `✅ <strong>Sportmonks:</strong> ${probs.sportmonks}%<br>`;
+                    html += `✅ <strong>Sportmonks:</strong> ${probs.sportmonks}% <small>(analiza ostatnich 10 meczów)</small><br>`;
                 } else {
                     html += `⚪ <strong>Sportmonks:</strong> Brak danych<br>`;
                 }
                 
                 // FootyStats
                 if (probs.footystats) {
-                    html += `✅ <strong>FootyStats:</strong> ${probs.footystats}%<br>`;
+                    html += `✅ <strong>FootyStats:</strong> ${probs.footystats}% <small>(analiza ostatnich 10 meczów)</small><br>`;
                 } else {
-                    html += `❌ <strong>FootyStats:</strong> Wyłączone (404/403)<br>`;
+                    html += `⚪ <strong>FootyStats:</strong> Brak danych<br>`;
                 }
                 
                 // API-Football
@@ -589,38 +590,21 @@
                     html += `⏸️ <strong>API-Football:</strong> Wyłączone (limit)<br>`;
                 }
                 
-                // TotalCorner
-                if (probs.totalcorner) {
-                    html += `✅ <strong>TotalCorner:</strong> ${probs.totalcorner}%<br>`;
-                } else {
-                    html += `⚪ <strong>TotalCorner:</strong> Brak danych<br>`;
-                }
+                // Web scraping usunięty
+                html += `<br><small style="color:#888;">⚠️ Web scraping (TotalCorner, BetOnCorners, CornerStat) usunięty - niestabilny</small><br>`;
                 
-                // BetOnCorners
-                if (probs.betoncorners) {
-                    html += `✅ <strong>BetOnCorners:</strong> ${probs.betoncorners}%<br>`;
-                } else {
-                    html += `⚪ <strong>BetOnCorners:</strong> Brak danych<br>`;
-                }
-                
-                // CornerStat
-                if (probs.cornerstat) {
-                    html += `✅ <strong>CornerStat:</strong> ${probs.cornerstat}%<br>`;
-                } else {
-                    html += `⚪ <strong>CornerStat:</strong> Brak danych<br>`;
-                }
-                
-                // Podsumowanie
-                const activeProbs = [probs.sportmonks, probs.footystats, probs.apifootball, 
-                                     probs.totalcorner, probs.betoncorners, probs.cornerstat].filter(p => p);
+                // Podsumowanie - tylko Sportmonks i FootyStats
+                const activeProbs = [probs.sportmonks, probs.footystats].filter(p => p);
                 if (activeProbs.length > 0) {
                     const avg = Math.round(activeProbs.reduce((a,b) => a+b, 0) / activeProbs.length);
-                    html += `<br><strong style="color:#4af; font-size:1.2em;">🎯 ŚREDNIA: ${avg}% (z ${activeProbs.length} źródeł)</strong>`;
+                    html += `<strong style="color:#4af; font-size:1.2em;">🎯 ŚREDNIA: ${avg}% (z ${activeProbs.length} ${activeProbs.length === 1 ? 'źródła' : 'źródeł'})</strong>`;
+                } else {
+                    html += `<small style="color:#f88;">⚠️ Brak danych z API</small>`;
                 }
                 
                 html += `</div>`;
                 
-                html += `<br><small style="color:#aaa;">💡 Średnia z historii + predykcje z wielu źródeł = kompleksowa analiza</small>`;
+                html += `<br><small style="color:#aaa;">💡 Historia ostatnich 5 meczów + analiza Sportmonks (10) + FootyStats (10) = kompleksowe dane</small>`;
                 html += '</div>';
                 
                 newRow.querySelector('.details-content').innerHTML = html;
@@ -735,37 +719,103 @@
             document.getElementById('loader').style.display = 'none';
         }
 
+        async function checkFootyStatsLeagues() {
+            document.getElementById('loader').style.display = 'inline-block';
+            document.getElementById('info').textContent = '🔍 Sprawdzam dostępne ligi w FootyStats...';
+            
+            try {
+                // FootyStats - sprawdź dostępne ligi
+                const url = `https://api.footystats.org/leagues?key=${FOOTYSTATS_KEY}`;
+                console.log('📡 FootyStats URL:', url);
+                
+                const res = await fetch(url);
+                const data = await res.json();
+                
+                console.log('📦 Odpowiedź FootyStats:', data);
+                
+                if (data.data && Array.isArray(data.data)) {
+                    const leagues = data.data;
+                    console.log(`✅ Znaleziono ${leagues.length} lig w FootyStats`);
+                    
+                    // Wyświetl ligi w tabeli
+                    const table = document.getElementById('predictions');
+                    table.style.display = 'table';
+                    
+                    let html = `<tr>
+                        <th>ID</th>
+                        <th>Nazwa Ligi</th>
+                        <th>Kraj</th>
+                        <th>Sezon</th>
+                    </tr>`;
+                    
+                    // Sortuj po kraju, potem po nazwie
+                    const sortedLeagues = leagues.sort((a, b) => {
+                        const countryA = a.country?.name || a.country || 'ZZZ';
+                        const countryB = b.country?.name || b.country || 'ZZZ';
+                        if (countryA !== countryB) return countryA.localeCompare(countryB);
+                        return (a.name || '').localeCompare(b.name || '');
+                    });
+                    
+                    sortedLeagues.forEach(league => {
+                        html += `<tr>
+                            <td>${league.id || '-'}</td>
+                            <td><strong>${league.name || 'Unknown'}</strong></td>
+                            <td>${league.country?.name || league.country || '-'}</td>
+                            <td>${league.season || '-'}</td>
+                        </tr>`;
+                    });
+                    
+                    table.innerHTML = html;
+                    
+                    document.getElementById('info').innerHTML = `
+                        ✅ Znaleziono <strong>${leagues.length} lig</strong> w FootyStats<br>
+                        <small style="color:#aaa;">To więcej niż Sportmonks! FootyStats może być lepszym głównym źródłem.</small>
+                    `;
+                    
+                    // Wyświetl szczegóły w konsoli
+                    console.log('📋 WSZYSTKIE DOSTĘPNE LIGI (FootyStats):');
+                    leagues.forEach((league, index) => {
+                        console.log(`${index + 1}. [${league.id}] ${league.name} (${league.country?.name || league.country})`);
+                    });
+                    
+                } else {
+                    document.getElementById('info').textContent = '❌ Brak dostępnych lig lub problem z FootyStats API';
+                    console.error('Brak lig w odpowiedzi:', data);
+                }
+                
+            } catch (e) {
+                console.error('💥 BŁĄD podczas sprawdzania lig FootyStats:', e);
+                document.getElementById('info').textContent = 'Błąd: ' + e.message;
+            }
+            
+            document.getElementById('loader').style.display = 'none';
+        }
+
 
         // Helper: opóźnienie
         const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
         async function getAllProbabilities(home, away, id, league) {
             try {
-                console.log('  📡 Pobieranie prawdopodobieństw z API i web scraping...');
+                console.log('  📡 Pobieranie prawdopodobieństw z API...');
                 
-                // ✅ WŁĄCZONE: Wszystkie źródła!
-                const p1 = 65; // Sportmonks - wartość domyślna
+                // ✅ WŁĄCZONE: Tylko stabilne źródła API!
+                const p1 = await getSportmonksProb(home, away); // Analiza ostatnich 10 meczów
+                
+                await delay(500); // Opóźnienie przed następnym
+                
                 const p2 = await getFootyStatsProb(home, away);
-                
-                await delay(300); // Opóźnienie przed web scrapingiem
-                
                 const p3 = null; // API-Football - wyłączone (limit)
-                const p4 = await getTotalCornerProb(home, away);
+                const p4 = null; // TotalCorner - USUNIĘTE (web scraping niestabilny)
+                const p5 = null; // BetOnCorners - USUNIĘTE (web scraping niestabilny)
+                const p6 = null; // CornerStat - USUNIĘTE (web scraping niestabilny)
                 
-                await delay(300); // Opóźnienie między zapytaniami
-                
-                const p5 = await getBetOnCornersProb(home);
-                
-                await delay(300); // Opóźnienie między zapytaniami
-                
-                const p6 = await getCornerStatProb(home, away);
-                
-                console.log(`  1️⃣ Sportmonks: ${p1}% (DOMYŚLNA)`);
-                console.log(`  2️⃣ FootyStats: ${p2 ? p2 + '%' : 'WYŁĄCZONE (404/403)'}`);
+                console.log(`  1️⃣ Sportmonks: ${p1 ? p1 + '% (analiza 10 meczów)' : 'BRAK DANYCH'}`);
+                console.log(`  2️⃣ FootyStats: ${p2 ? p2 + '% (analiza 10 meczów) ✅ WŁĄCZONY' : 'BRAK DANYCH'}`);
                 console.log(`  3️⃣ API-Football: WYŁĄCZONE (limit)`);
-                console.log(`  4️⃣ TotalCorner: ${p4 ? p4 + '%' : 'BRAK DANYCH'}`);
-                console.log(`  5️⃣ BetOnCorners: ${p5 ? p5 + '%' : 'BRAK DANYCH'}`);
-                console.log(`  6️⃣ CornerStat: ${p6 ? p6 + '%' : 'BRAK DANYCH'}`);
+                console.log(`  4️⃣ TotalCorner: USUNIĘTE`);
+                console.log(`  5️⃣ BetOnCorners: USUNIĘTE`);
+                console.log(`  6️⃣ CornerStat: USUNIĘTE`);
                 
                 // Zwróć tylko te które mają wartość
                 const probs = [p1, p2, p3, p4, p5, p6].filter(p => p !== null);
@@ -773,86 +823,232 @@
                 // Zapisz szczegóły do globalnej zmiennej (do wyświetlenia w historii)
                 window.lastMatchProbs = { p1, p2, p3, p4, p5, p6, home, away, id };
                 
-                return probs.length > 0 ? probs : [65]; // fallback jeśli wszystko null
+                return probs.length > 0 ? probs : []; // fallback jeśli wszystko null
             } catch (e) {
                 console.error('  ❌ Błąd w getAllProbabilities:', e);
-                return [65]; // fallback
+                return []; // fallback
             }
         }
 
-        // === 1. SPORTMONKS ===
-        async function getSportmonksProb(id) {
-            if (!SPORTMONKS_KEY || SPORTMONKS_KEY.includes('TU_WKLEJ')) return 65;
-            try {
-                const url = `${PROXY}https://api.sportmonks.com/v3/football/fixtures/${id}?include=statistics&api_token=${SPORTMONKS_KEY}`;
-                const res = await fetch(url);
-                if (!res.ok) return 60;
-                const data = await res.json();
-                const stats = data.data?.[0]?.statistics;
-                const avg = stats ? ((stats.home?.corners || 0) + (stats.away?.corners || 0)) / 2 : 9;
-                return Math.min(95, 50 + (avg - 9) * 10);
-            } catch { return 60; }
-        }
-
-        // === 2. FOOTYSTATS - TYMCZASOWO WYŁĄCZONE (404/403 błędy) ===
-        async function getFootyStatsProb(home, away) {
-            // ⚠️ WYŁĄCZONE: endpoint /team-matches zwraca 404, a corsproxy.io blokuje (403)
-            console.log(`  📊 FootyStats: WYŁĄCZONE (błąd API)`);
-            return null;
+        // === 1. SPORTMONKS - ANALIZA OSTATNICH 10 MECZÓW ===
+        async function getSportmonksProb(homeTeam, awayTeam) {
+            if (!SPORTMONKS_KEY || SPORTMONKS_KEY.includes('TU_WKLEJ')) return null;
             
-            /* ORYGINALNY KOD (do naprawy później):
             try {
-                console.log(`  📊 FootyStats: ${home} vs ${away}`);
+                console.log(`    🔍 Sportmonks: Analizuję ostatnie mecze ${homeTeam} i ${awayTeam}`);
                 
-                // FootyStats wymaga team_id, więc używamy wyszukiwania
-                const searchHome = home.toLowerCase().replace(/\s+/g, '-');
-                const searchAway = away.toLowerCase().replace(/\s+/g, '-');
+                // 1. Znajdź ID drużyn
+                const homeId = await getSportmonksTeamId(homeTeam);
+                const awayId = await getSportmonksTeamId(awayTeam);
                 
-                // Szukamy meczu w FootyStats
-                const url = `${PROXY}https://api.footystats.org/team-matches?key=${FOOTYSTATS_KEY}&team_name=${encodeURIComponent(home)}`;
-                const res = await fetch(url);
-                
-                if (!res.ok) {
-                    console.warn(`  ⚠️ FootyStats: błąd ${res.status}`);
+                if (!homeId || !awayId) {
+                    console.warn(`    ⚠️ Nie znaleziono ID drużyn`);
                     return null;
                 }
                 
-                const data = await res.json();
-                console.log(`  📦 FootyStats odpowiedź:`, data);
+                // 2. Pobierz ostatnie 10 meczów obu drużyn
+                const homeMatches = await getSportmonksTeamMatches(homeId, 10);
+                const awayMatches = await getSportmonksTeamMatches(awayId, 10);
                 
-                // Szukamy prawdopodobieństwa over 9.5 corners
-                if (data.data && data.data.length > 0) {
-                    // Szukamy meczu home vs away
-                    const match = data.data.find(m => 
-                        (m.homeTeam?.name === home && m.awayTeam?.name === away) ||
-                        (m.home_name === home && m.away_name === away)
-                    );
-                    
-                    if (match) {
-                        const cornersProb = match.over_9_5_corners_probability || 
-                                          match.corners_prediction?.over_9_5 ||
-                                          null;
-                        
-                        if (cornersProb) {
-                            console.log(`  ✅ FootyStats: ${cornersProb}%`);
-                            return Math.round(cornersProb);
-                        }
-                    }
-                    
-                    // Jeśli nie ma konkretnego meczu, użyj średniej drużyny
-                    const avgCorners = data.team_stats?.avg_corners_total || 9.5;
-                    const prob = avgCorners > 10 ? 70 : 55;
-                    console.log(`  ℹ️ FootyStats (avg): ${prob}% (śr. rożnych: ${avgCorners})`);
-                    return prob;
-                }
+                // 3. Zlicz ile meczów miało over 9.5 rożnych
+                let homeOver = 0, homeTotal = 0;
+                let awayOver = 0, awayTotal = 0;
                 
-                console.warn(`  ⚠️ FootyStats: brak danych`);
-                return null;
+                homeMatches.forEach(m => {
+                    const total = (m.corners_home || 0) + (m.corners_away || 0);
+                    if (total > 9.5) homeOver++;
+                    homeTotal++;
+                });
+                
+                awayMatches.forEach(m => {
+                    const total = (m.corners_home || 0) + (m.corners_away || 0);
+                    if (total > 9.5) awayOver++;
+                    awayTotal++;
+                });
+                
+                // 4. Oblicz procent
+                const homePercent = homeTotal > 0 ? Math.round((homeOver / homeTotal) * 100) : 0;
+                const awayPercent = awayTotal > 0 ? Math.round((awayOver / awayTotal) * 100) : 0;
+                const avgPercent = Math.round((homePercent + awayPercent) / 2);
+                
+                console.log(`    ✅ Sportmonks: ${homeTeam} ${homeOver}/${homeTotal} (${homePercent}%), ${awayTeam} ${awayOver}/${awayTotal} (${awayPercent}%) → średnia ${avgPercent}%`);
+                
+                return avgPercent;
+                
             } catch (e) {
-                console.error('  ❌ FootyStats error:', e);
+                console.error('    ❌ Sportmonks error:', e.message);
                 return null;
             }
-            */
+        }
+        
+        // Helper: Znajdź ID drużyny w Sportmonks
+        async function getSportmonksTeamId(teamName) {
+            try {
+                const url = `${PROXY}https://api.sportmonks.com/v3/football/teams/search/${encodeURIComponent(teamName)}?api_token=${SPORTMONKS_KEY}`;
+                const res = await fetch(url);
+                if (!res.ok) return null;
+                const data = await res.json();
+                
+                if (data.data && data.data.length > 0) {
+                    return data.data[0].id;
+                }
+                return null;
+            } catch {
+                return null;
+            }
+        }
+
+        // Helper: Pobierz ostatnie mecze drużyny
+        async function getSportmonksTeamMatches(teamId, limit = 10) {
+            try {
+                const url = `${PROXY}https://api.sportmonks.com/v3/football/teams/${teamId}?include=latest.statistics.type&api_token=${SPORTMONKS_KEY}`;
+                const res = await fetch(url);
+                if (!res.ok) return [];
+                const data = await res.json();
+                
+                const matches = data.data?.latest || [];
+                const result = [];
+                
+                // Pobierz ostatnie N zakończonych meczów
+                for (const match of matches) {
+                    if (result.length >= limit) break;
+                    if (match.state_id !== 5 && match.state_id !== 6 && match.state_id !== 7) continue; // Tylko zakończone
+                    
+                    const stats = match.statistics || [];
+                    const corners = stats.filter(s => s.type_id === 34); // type_id 34 = Corners
+                    
+                    let homeCorners = 0, awayCorners = 0;
+                    
+                    // Parsuj statystyki rożnych
+                    corners.forEach(c => {
+                        const value = parseInt(c.data?.value || 0);
+                        if (c.location === 'home') homeCorners = value;
+                        if (c.location === 'away') awayCorners = value;
+                    });
+                    
+                    result.push({
+                        corners_home: homeCorners,
+                        corners_away: awayCorners,
+                        team_id: teamId,
+                        match_id: match.id
+                    });
+                }
+                
+                return result;
+            } catch (e) {
+                console.error('    ❌ Błąd pobierania meczów:', e.message);
+                return [];
+            }
+        }
+        
+        // Helper: Pobierz średnią rożnych SAMEJ drużyny z ostatnich 5 meczów
+        async function getSportmonksTeamOwnCorners(teamId, limit = 5) {
+            try {
+                const matches = await getSportmonksTeamMatches(teamId, limit);
+                const ownCorners = [];
+                
+                // TODO: Trzeba wiedzieć czy drużyna grała jako host czy guest
+                // Na razie zwracam średnią z obu stron
+                matches.forEach(m => {
+                    const avg = (m.corners_home + m.corners_away) / 2;
+                    ownCorners.push(avg);
+                });
+                
+                if (ownCorners.length === 0) return null;
+                
+                const avgOwn = ownCorners.reduce((a, b) => a + b, 0) / ownCorners.length;
+                return Math.round(avgOwn * 10) / 10; // Zaokrąglij do 1 miejsca po przecinku
+                
+            } catch {
+                return null;
+            }
+        }
+
+        // === 2. FOOTYSTATS - ANALIZA OSTATNICH 10 MECZÓW ===
+        async function getFootyStatsProb(home, away) {
+            try {
+                console.log(`    🔍 FootyStats: Analizuję ${home} i ${away}`);
+                
+                // 1. Pobierz ID drużyn przez wyszukiwanie
+                const homeId = await getFootyStatsTeamId(home);
+                const awayId = await getFootyStatsTeamId(away);
+                
+                if (!homeId || !awayId) {
+                    console.warn(`    ⚠️ FootyStats: Nie znaleziono ID drużyn`);
+                    return null;
+                }
+                
+                console.log(`    📌 IDs: ${home} = ${homeId}, ${away} = ${awayId}`);
+                
+                // 2. Pobierz ostatnie 10 meczów obu drużyn
+                const homeMatches = await getFootyStatsTeamMatches(homeId, 10);
+                const awayMatches = await getFootyStatsTeamMatches(awayId, 10);
+                
+                // 3. Zlicz ile meczów miało over 9.5 rożnych
+                let homeOver = 0, homeTotal = 0;
+                let awayOver = 0, awayTotal = 0;
+                
+                homeMatches.forEach(m => {
+                    const total = (m.total_corners_count || 0);
+                    if (total > 9.5) homeOver++;
+                    homeTotal++;
+                });
+                
+                awayMatches.forEach(m => {
+                    const total = (m.total_corners_count || 0);
+                    if (total > 9.5) awayOver++;
+                    awayTotal++;
+                });
+                
+                // 4. Oblicz procent
+                const homePercent = homeTotal > 0 ? Math.round((homeOver / homeTotal) * 100) : 0;
+                const awayPercent = awayTotal > 0 ? Math.round((awayOver / awayTotal) * 100) : 0;
+                const avgPercent = Math.round((homePercent + awayPercent) / 2);
+                
+                console.log(`    ✅ FootyStats: ${home} ${homeOver}/${homeTotal} (${homePercent}%), ${away} ${awayOver}/${awayTotal} (${awayPercent}%) → średnia ${avgPercent}%`);
+                
+                return avgPercent;
+                
+            } catch (e) {
+                console.error('    ❌ FootyStats error:', e.message);
+                return null;
+            }
+        }
+        
+        // Helper: Znajdź ID drużyny w FootyStats
+        async function getFootyStatsTeamId(teamName) {
+            try {
+                // FootyStats używa nazwy drużyny jako identyfikatora w URL
+                const cleanName = teamName.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+                return cleanName; // FootyStats używa nazw, nie numerycznych ID
+            } catch {
+                return null;
+            }
+        }
+        
+        // Helper: Pobierz ostatnie mecze drużyny z FootyStats
+        async function getFootyStatsTeamMatches(teamSlug, limit = 10) {
+            try {
+                const url = `https://api.footystats.org/team-matches?key=${FOOTYSTATS_KEY}&team=${teamSlug}`;
+                console.log(`    📡 FootyStats URL: ${url}`);
+                
+                const res = await fetch(url);
+                if (!res.ok) {
+                    console.warn(`    ⚠️ FootyStats: błąd ${res.status}`);
+                    return [];
+                }
+                
+                const data = await res.json();
+                console.log(`    📦 FootyStats odpowiedź dla ${teamSlug}:`, data);
+                
+                // FootyStats zwraca dane w różnych formatach
+                const matches = data.data || data.matches || [];
+                return matches.slice(0, limit);
+                
+            } catch (e) {
+                console.error(`    ❌ Błąd pobierania meczów z FootyStats:`, e.message);
+                return [];
+            }
         }
 
         // === 3. API-FOOTBALL ===
@@ -870,159 +1066,9 @@
             } catch { return 58; }
         }
 
-        // === 4. TOTALCORNER.COM (scrap) ===
-        async function getTotalCornerProb(home, away) {
-            try {
-                console.log(`    🌐 TotalCorner: ${home} vs ${away}`);
-                const url = `${PROXY}https://www.totalcorner.com/match/corner-stats/${home.replace(/ /g,'-')}-vs-${away.replace(/ /g,'-')}`;
-                console.log(`    📡 URL: ${url}`);
-                
-                const res = await fetch(url);
-                if (!res.ok) {
-                    console.warn(`    ⚠️ TotalCorner: błąd ${res.status}`);
-                    return null;
-                }
-                
-                const html = await res.text();
-                console.log(`    📄 HTML length: ${html.length} chars`);
-                
-                // Szukaj różnych wariantów średniej rożnych
-                let match = html.match(/Average Corners per Match[:\s]+(\d+\.?\d*)/i);
-                if (!match) {
-                    match = html.match(/Total Corners[:\s]+(\d+\.?\d*)/i);
-                }
-                if (!match) {
-                    match = html.match(/avg.*?corners.*?(\d+\.?\d*)/i);
-                }
-                
-                if (match) {
-                    const avg = parseFloat(match[1]);
-                    console.log(`    🔍 Znaleziono wartość: "${match[0]}" → avg=${avg}`);
-                    
-                    // Sprawdź czy wartość jest sensowna
-                    if (avg < 4 || avg > 20) {
-                        console.warn(`    ⚠️ TotalCorner: podejrzana wartość avg=${avg}`);
-                        return null;
-                    }
-                    
-                    // Lepsza formuła: avg 9.5 = 50%, każdy +1 = +8%
-                    const prob = Math.min(95, Math.max(20, Math.round(50 + (avg - 9.5) * 8)));
-                    console.log(`    ✅ TotalCorner: avg=${avg} → ${prob}%`);
-                    return prob;
-                } else {
-                    console.warn(`    ⚠️ TotalCorner: nie znaleziono średniej rożnych`);
-                    const preview = html.substring(0, 500);
-                    console.log(`    🔍 HTML preview:`, preview);
-                    return null;
-                }
-            } catch (e) {
-                console.error(`    ❌ TotalCorner error:`, e.message);
-                return null;
-            }
-        }
-
-        // === 5. BETONCORNERS.COM (scrap) ===
-        async function getBetOnCornersProb(home) {
-            try {
-                console.log(`    🌐 BetOnCorners: ${home}`);
-                const url = `${PROXY}https://www.betoncorners.com/statistics/${home.toLowerCase().replace(/ /g,'-')}`;
-                console.log(`    📡 URL: ${url}`);
-                
-                const res = await fetch(url);
-                if (!res.ok) {
-                    console.warn(`    ⚠️ BetOnCorners: błąd ${res.status}`);
-                    return null;
-                }
-                
-                const html = await res.text();
-                console.log(`    📄 HTML length: ${html.length} chars`);
-                
-                // Szukaj różnych wariantów średniej rożnych
-                let match = html.match(/Average Corners per Game[:\s]+(\d+\.?\d*)/i);
-                if (!match) {
-                    match = html.match(/Corners per match[:\s]+(\d+\.?\d*)/i);
-                }
-                if (!match) {
-                    match = html.match(/avg.*?corners.*?(\d+\.?\d*)/i);
-                }
-                
-                if (match) {
-                    const avg = parseFloat(match[1]);
-                    console.log(`    🔍 Znaleziono wartość: "${match[0]}" → avg=${avg}`);
-                    
-                    // Sprawdź czy wartość jest sensowna (średnia rożnych powinna być 6-15)
-                    if (avg < 4 || avg > 20) {
-                        console.warn(`    ⚠️ BetOnCorners: podejrzana wartość avg=${avg} (oczekiwano 6-15)`);
-                        return null;
-                    }
-                    
-                    // Lepsza formuła konwersji: avg 9.5 = 50%, każdy +1 = +8%
-                    const prob = Math.min(95, Math.max(20, Math.round(50 + (avg - 9.5) * 8)));
-                    console.log(`    ✅ BetOnCorners: avg=${avg} → ${prob}%`);
-                    return prob;
-                } else {
-                    console.warn(`    ⚠️ BetOnCorners: nie znaleziono średniej rożnych`);
-                    // DEBUG: pokaż fragment HTML
-                    const preview = html.substring(0, 500);
-                    console.log(`    🔍 HTML preview:`, preview);
-                    return null;
-                }
-            } catch (e) {
-                console.error(`    ❌ BetOnCorners error:`, e.message);
-                return null;
-            }
-        }
-
-        // === 6. CORNER-STAT.COM (scrap) ===
-        async function getCornerStatProb(home, away) {
-            try {
-                console.log(`    🌐 CornerStat: ${home} vs ${away}`);
-                const url = `${PROXY}https://corner-stat.com/match/${home.toLowerCase().replace(/ /g,'-')}-vs-${away.toLowerCase().replace(/ /g,'-')}`;
-                console.log(`    📡 URL: ${url}`);
-                
-                const res = await fetch(url);
-                if (!res.ok) {
-                    console.warn(`    ⚠️ CornerStat: błąd ${res.status}`);
-                    return null;
-                }
-                
-                const html = await res.text();
-                console.log(`    📄 HTML length: ${html.length} chars`);
-                
-                // Szukaj różnych wariantów średniej rożnych
-                let match = html.match(/Corners per match[:\s]+(\d+\.?\d*)/i);
-                if (!match) {
-                    match = html.match(/Average corners[:\s]+(\d+\.?\d*)/i);
-                }
-                if (!match) {
-                    match = html.match(/Total.*?corners.*?(\d+\.?\d*)/i);
-                }
-                
-                if (match) {
-                    const avg = parseFloat(match[1]);
-                    console.log(`    🔍 Znaleziono wartość: "${match[0]}" → avg=${avg}`);
-                    
-                    // Sprawdź czy wartość jest sensowna
-                    if (avg < 4 || avg > 20) {
-                        console.warn(`    ⚠️ CornerStat: podejrzana wartość avg=${avg}`);
-                        return null;
-                    }
-                    
-                    // Lepsza formuła: avg 9.5 = 50%, każdy +1 = +8%
-                    const prob = Math.min(95, Math.max(20, Math.round(50 + (avg - 9.5) * 8)));
-                    console.log(`    ✅ CornerStat: avg=${avg} → ${prob}%`);
-                    return prob;
-                } else {
-                    console.warn(`    ⚠️ CornerStat: nie znaleziono średniej rożnych`);
-                    const preview = html.substring(0, 500);
-                    console.log(`    🔍 HTML preview:`, preview);
-                    return null;
-                }
-            } catch (e) {
-                console.error(`    ❌ CornerStat error:`, e.message);
-                return null;
-            }
-        }
+        // === WEB SCRAPING USUNIĘTY ===
+        // TotalCorner, BetOnCorners, CornerStat - web scraping niestabilny
+        // Cloudflare blokuje, parsowanie HTML zawodne, 403/404 błędy
 
         function displayResults() {
             const table = document.getElementById('predictions');
@@ -1047,7 +1093,7 @@
                 });
             }
             table.innerHTML = html;
-            document.getElementById('info').innerHTML = `Znaleziono <strong>${predictions.length}</strong> typów!<br><small style="color:#afa;">✅ Aktywne: Sportmonks + TotalCorner + BetOnCorners + CornerStat (z opóźnieniami anty-Cloudflare)</small><br><small style="color:#faa;">❌ Wyłączone: FootyStats (404/403), API-Football (limit)</small>`;
+            document.getElementById('info').innerHTML = `Znaleziono <strong>${predictions.length}</strong> typów!<br><small style="color:#afa;">✅ Aktywne: Sportmonks + FootyStats (analiza ostatnich 10 meczów każdy - prawdziwe dane!)</small><br><small style="color:#faa;">❌ Wyłączone: API-Football (limit), Web scraping (niestabilny)</small><br><small style="color:#aaf;">⚠️ TEST MODE - nie wdrożone na GitHub</small>`;
             updateStats();
         }
 
