@@ -56,7 +56,7 @@
 <body>
     <div class="container">
         <h1>Corners Predictor v12 <span id="loader" class="loader" style="display:none;"></span></h1>
-        <p class="subtitle">6 źródeł | Pełny scrap | ≥50% zgoda | Flashscore + weryfikacja</p>
+        <p class="subtitle">5 źródeł (API-Football OFF) | ≥50% zgoda | TEST MODE</p>
 
         <div class="buttons">
             <button onclick="loadTodayMatches()">SZUKAJ MECZÓW NA DZIŚ</button>
@@ -151,7 +151,7 @@
 
         async function loadMatchesForDate(daysOffset = 0) {
             document.getElementById('loader').style.display = 'inline-block';
-            document.getElementById('info').textContent = 'Pobieranie meczów z 6 źródeł...';
+            document.getElementById('info').textContent = 'Pobieranie meczów z 5 źródeł (test bez API-Football)...';
             document.getElementById('predictions').style.display = 'none';
             predictions = [];
 
@@ -159,36 +159,28 @@
                 const date = new Date();
                 date.setDate(date.getDate() + daysOffset);
                 const dateStr = date.toISOString().split('T')[0];
-                const url = `${PROXY}https://v3.football.api-sports.io/fixtures?date=${dateStr}&timezone=Europe/Warsaw`;
                 
                 console.log('🔍 Pobieranie meczów na:', dateStr);
-                console.log('📡 URL:', url);
-
-                const res = await fetch(url, {
-                    headers: { 'x-apisports-key': API_FOOTBALL_KEYS[currentKeyIndex] }
-                });
-                const data = await res.json();
-                console.log('✅ Odpowiedź API:', data);
-                console.log('📝 Status API:', res.status);
-                console.log('📦 Response data:', data.response);
-                console.log('⚠️ Errors (jeśli są):', data.errors);
+                console.log('⚠️ API-FOOTBALL TYMCZASOWO WYŁĄCZONE - używam Sportmonks');
+                document.getElementById('api-status').innerHTML = '⚠️ <strong>API-Football wyłączone (test)</strong> - używam Sportmonks';
                 
-                // Sprawdź czy limit został osiągnięty
-                if (res.status === 429 || data.message?.includes('limit') || data.errors?.requests) {
-                    console.warn('⚠️⚠️⚠️ API-FOOTBALL LIMIT OSIĄGNIĘTY! ⚠️⚠️⚠️');
-                    console.log('🔄 Próbuję pobrać mecze z Sportmonks...');
-                    document.getElementById('info').textContent = '⚠️ Limit API-Football - próba z Sportmonks...';
-                    document.getElementById('api-status').innerHTML = '⚠️ <strong>API-Football limit osiągnięty (100/100 zapytań)</strong> - używam Sportmonks jako backup';
-                    
-                    // Spróbuj Sportmonks
-                    const sportmonksUrl = `${PROXY}https://api.sportmonks.com/v3/football/fixtures/date/${dateStr}?api_token=${SPORTMONKS_KEY}&include=participants,league`;
-                    const smRes = await fetch(sportmonksUrl);
+                // TYMCZASOWO: Od razu używaj Sportmonks zamiast API-Football
+                let fixtures = null;
+                
+                // Próbuj Sportmonks jako główne źródło
+                console.log('🔄 Używam Sportmonks jako głównego źródła...');
+                const sportmonksUrl = `${PROXY}https://api.sportmonks.com/v3/football/fixtures/date/${dateStr}?api_token=${SPORTMONKS_KEY}&include=participants,league`;
+                console.log('📡 Sportmonks URL:', sportmonksUrl);
+                const smRes = await fetch(sportmonksUrl);
+                console.log('📝 Sportmonks Status:', smRes.status);
+                
+                if (smRes.ok) {
                     const smData = await smRes.json();
+                    console.log('📦 Sportmonks Data:', smData);
                     
                     if (smData.data && smData.data.length > 0) {
                         console.log(`✅ [Sportmonks] Znaleziono ${smData.data.length} meczów`);
-                        // Konwertuj format Sportmonks na format API-Football
-                        const fixtures = smData.data.slice(0, 30).map(fix => ({
+                        fixtures = smData.data.slice(0, 30).map(fix => ({
                             fixture: { id: fix.id },
                             teams: {
                                 home: { name: fix.participants?.[0]?.name || 'Unknown' },
@@ -196,55 +188,22 @@
                             },
                             league: { name: fix.league?.name || 'Unknown' }
                         }));
-                        
-                        // Przetwórz mecze
-                        await processFixtures(fixtures);
-                        displayResults();
-                        document.getElementById('loader').style.display = 'none';
-                        return;
-                    } else {
-                        console.error('❌ Sportmonks też nie zwrócił meczów');
-                        document.getElementById('info').textContent = 'Błąd: Brak dostępnych źródeł danych.';
-                        document.getElementById('loader').style.display = 'none';
-                        return;
                     }
+                } else {
+                    console.error('❌ Sportmonks błąd:', smRes.status, smRes.statusText);
                 }
                 
-                const fixtures = data.response ? data.response.slice(0, 30) : [];
-                console.log(`⚽ Znaleziono ${fixtures.length} meczów`);
-                
-                if (fixtures.length > 0) {
-                    document.getElementById('api-status').innerHTML = '✅ <strong>API-Football działa poprawnie</strong>';
+                if (!fixtures || fixtures.length === 0) {
+                    console.error('❌ Brak meczów ze Sportmonks');
+                    document.getElementById('info').textContent = 'Błąd: Brak meczów w Sportmonks.';
+                    document.getElementById('loader').style.display = 'none';
+                    return;
                 }
                 
-                if (fixtures.length === 0) {
-                    console.warn('⚠️ API-Football zwróciło 0 meczów - próbuję Sportmonks...');
-                    document.getElementById('info').textContent = 'Brak meczów w API-Football - próba z Sportmonks...';
-                    
-                    // Spróbuj Sportmonks
-                    const sportmonksUrl = `${PROXY}https://api.sportmonks.com/v3/football/fixtures/date/${dateStr}?api_token=${SPORTMONKS_KEY}&include=participants,league`;
-                    const smRes = await fetch(sportmonksUrl);
-                    const smData = await smRes.json();
-                    
-                    if (smData.data && smData.data.length > 0) {
-                        console.log(`✅ [Sportmonks] Znaleziono ${smData.data.length} meczów`);
-                        const sportmonksFixtures = smData.data.slice(0, 30).map(fix => ({
-                            fixture: { id: fix.id },
-                            teams: {
-                                home: { name: fix.participants?.[0]?.name || 'Unknown' },
-                                away: { name: fix.participants?.[1]?.name || 'Unknown' }
-                            },
-                            league: { name: fix.league?.name || 'Unknown' }
-                        }));
-                        
-                        await processFixtures(sportmonksFixtures);
-                        displayResults();
-                        document.getElementById('loader').style.display = 'none';
-                        return;
-                    }
-                }
-
-                // Przetwórz mecze z API-Football
+                console.log(`⚽ Znaleziono ${fixtures.length} meczów ze Sportmonks`);
+                document.getElementById('api-status').innerHTML = '✅ <strong>Sportmonks działa poprawnie</strong> (API-Football wyłączone do testu)';
+                
+                // Przetwórz mecze ze Sportmonks
                 await processFixtures(fixtures);
                 displayResults();
             } catch (e) {
@@ -261,18 +220,19 @@
 
         async function getAllProbabilities(home, away, id, league) {
             try {
-                console.log('  📡 Pobieranie z 6 źródeł...');
-                const [p1, p2, p3, p4, p5, p6] = await Promise.all([
+                console.log('  📡 Pobieranie z 5 źródeł (API-Football wyłączone)...');
+                const [p1, p2, p4, p5, p6] = await Promise.all([
                     getSportmonksProb(id),
                     getFootyStatsProb(league),
-                    getApiFootballProb(id),
+                    // getApiFootballProb(id), // TYMCZASOWO WYŁĄCZONE
                     getTotalCornerProb(home, away),
                     getBetOnCornersProb(home),
                     getCornerStatProb(home, away)
                 ]);
+                const p3 = 65; // API-Football wyłączone - wartość domyślna
                 console.log(`  1️⃣ Sportmonks: ${p1}%`);
                 console.log(`  2️⃣ FootyStats: ${p2}%`);
-                console.log(`  3️⃣ API-Football: ${p3}%`);
+                console.log(`  3️⃣ API-Football: ${p3}% (WYŁĄCZONE)`);
                 console.log(`  4️⃣ TotalCorner: ${p4}%`);
                 console.log(`  5️⃣ BetOnCorners: ${p5}%`);
                 console.log(`  6️⃣ CornerStat: ${p6}%`);
