@@ -150,13 +150,20 @@
 
                 console.log('📊 Prawdopodobieństwa:', probs);
 
-                    const avgProb = Math.round(probs.reduce((a, b) => a + b, 0) / 6);
-                    const agree = Math.round(probs.filter(p => p >= 60).length / 6 * 100);
+                    // Filtrujemy tylko aktywne źródła (nie null, nie 0)
+                    const activeProbs = probs.filter(p => p && p > 0);
+                    const avgProb = activeProbs.length > 0 
+                        ? Math.round(activeProbs.reduce((a, b) => a + b, 0) / activeProbs.length)
+                        : 0;
+                    const agree = activeProbs.length > 0
+                        ? Math.round(activeProbs.filter(p => p >= 60).length / activeProbs.length * 100)
+                        : 0;
 
-                console.log(`📈 Średnia: ${avgProb}% | Zgodność: ${agree}%`);
+                console.log(`📈 Średnia: ${avgProb}% | Zgodność: ${agree}% (z ${activeProbs.length} źródeł)`);
 
-                    if (agree >= 50) {
-                    console.log('✅ Mecz spełnia kryteria (≥50%)!');
+                    // ⚠️ ZMIENIONE: Próg obniżony do 30% bo większość API wyłączona
+                    if (agree >= 30 && avgProb >= 55) {
+                    console.log('✅ Mecz spełnia kryteria (zgdn.≥30%, śr.≥55%)!');
                         predictions.push({
                             match: `${home} vs ${away}`,
                             league,
@@ -169,7 +176,7 @@
                         awayTeam: away
                     });
                 } else {
-                    console.log('❌ Mecz NIE spełnia kryteriów (zgodność < 50%)');
+                    console.log(`❌ Mecz NIE spełnia kryteriów (zgdn:${agree}%<30% LUB śr:${avgProb}%<55%)`);
                 }
             }
         }
@@ -510,9 +517,8 @@
             
             Promise.all([
                 getTeamHistory(homeTeam, matchId),
-                getTeamHistory(awayTeam, matchId),
-                getFootyStatsProb(homeTeam, awayTeam)  // ← Dodano FootyStats!
-            ]).then(([homeHistory, awayHistory, footyStatsProb]) => {
+                getTeamHistory(awayTeam, matchId)
+            ]).then(([homeHistory, awayHistory]) => {
                 let html = '<div style="text-align: left;">';
                 
                 // Historia drużyny gospodarzy
@@ -543,18 +549,14 @@
                 }
                 html += `</small></div>`;
                 
-                // 🆕 PREDYKCJA FOOTYSTATS DLA TEGO MECZU
-                html += `<br><div class="team-stats" style="background: #1a3a52; border: 2px solid #4fc3f7;">
-                    <strong>📊 Predykcja FootyStats dla tego meczu</strong><br>`;
-                if (footyStatsProb) {
-                    html += `<strong style="color: #4fc3f7; font-size: 1.3em;">${footyStatsProb}%</strong> szans na Over 9.5 rożnych<br>`;
-                    html += `<small style="color:#aaa;">Źródło: FootyStats API (prawdziwe dane)</small>`;
-                } else {
-                    html += `<small style="color:#faa;">Brak danych z FootyStats dla tego meczu</small>`;
-                }
+                // FOOTYSTATS - TYMCZASOWO WYŁĄCZONE
+                html += `<br><div class="team-stats" style="background: #3a1a1a; border: 2px solid #f44;">
+                    <strong>⚠️ FootyStats API - Tymczasowo niedostępne</strong><br>`;
+                html += `<small style="color:#faa;">Endpoint /team-matches zwraca 404, proxy blokuje (403).<br>`;
+                html += `Pracuję nad rozwiązaniem - na razie używam Sportmonks.</small>`;
                 html += `</div>`;
                 
-                html += `<br><small style="color:#aaa;">💡 Średnia z historii + predykcja = kompletny obraz meczu</small>`;
+                html += `<br><small style="color:#aaa;">💡 Historia rożnych + statystyki Sportmonks = solidne dane</small>`;
                 html += '</div>';
                 
                 newRow.querySelector('.details-content').innerHTML = html;
@@ -714,8 +716,13 @@
             } catch { return 60; }
         }
 
-        // === 2. FOOTYSTATS - PRAWDZIWE API ===
+        // === 2. FOOTYSTATS - TYMCZASOWO WYŁĄCZONE (404/403 błędy) ===
         async function getFootyStatsProb(home, away) {
+            // ⚠️ WYŁĄCZONE: endpoint /team-matches zwraca 404, a corsproxy.io blokuje (403)
+            console.log(`  📊 FootyStats: WYŁĄCZONE (błąd API)`);
+            return null;
+            
+            /* ORYGINALNY KOD (do naprawy później):
             try {
                 console.log(`  📊 FootyStats: ${home} vs ${away}`);
                 
@@ -767,6 +774,7 @@
                 console.error('  ❌ FootyStats error:', e);
                 return null;
             }
+            */
         }
 
         // === 3. API-FOOTBALL ===
@@ -823,7 +831,7 @@
             let html = `<tr><th>Mecz</th><th>Liga</th><th>Średnia %</th><th>ZGODNOŚĆ</th><th>Link</th><th>Status</th></tr>`;
 
             if (predictions.length === 0) {
-                html += `<tr><td colspan="6">Brak meczów z ≥50% zgodnością.</td></tr>`;
+                html += `<tr><td colspan="6">Brak meczów spełniających kryteria (zgdn.≥30%, śr.≥55%).</td></tr>`;
             } else {
                 predictions.forEach(p => {
                     const cls = p.agree >= 80 ? 'high' : p.agree >= 70 ? 'medium' : '';
@@ -840,7 +848,7 @@
                 });
             }
             table.innerHTML = html;
-            document.getElementById('info').textContent = `Znaleziono ${predictions.length} typów (≥50%)!`;
+            document.getElementById('info').innerHTML = `Znaleziono <strong>${predictions.length}</strong> typów!<br><small style="color:#ffa;">⚠️ FootyStats wyłączony (404/403) - używam tylko Sportmonks</small>`;
             updateStats();
         }
 
