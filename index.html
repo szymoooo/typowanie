@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Corners Predictor LIVE</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background: #0f0f23; color: #fff; text-align: center; margin: 0; padding: 20px; }
+        h1 { color: #ff5722; }
+        table { width: 100%; max-width: 900px; margin: 20px auto; border-collapse: collapse; background: #1a1a2e; }
+        th, td { padding: 12px; border: 1px solid #333; }
+        th { background: #16213e; }
+        .hit { background: #2e7d32 !important; color: #fff; }
+        .miss { background: #c62828 !important; color: #fff; }
+        .pending { background: #ff8f00; color: #000; }
+        button { background: #ff5722; color: white; border: none; padding: 12px 24px; margin: 10px; font-size: 16px; cursor: pointer; border-radius: 8px; }
+        button:hover { background: #e64a19; }
+        #stats { font-size: 1.2em; margin: 20px; }
+        .loader { display: inline-block; width: 20px; height: 20px; border: 3px solid #f3f3f3; border-top: 3px solid #ff5722; border-radius: 50%; animation: spin 1s linear infinite; margin-left: 10px; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        canvas { margin: 20px auto; max-width: 400px; }
+    </style>
+</head>
+<body>
+    <h1>Corners Predictor LIVE <span id="loader" class="loader" style="display:none;"></span></h1>
+    <button onclick="loadPredictions()">ZAŁADUJ TYPY NA DZIŚ</button>
+    <button onclick="verifyResults()">SPRAWDŹ WYNIKI</button>
+
+    <table id="predictions">
+        <tr><th>Mecz</th><th>Liga</th><th>% Over 9.5</th><th>Średnia Rożnych</th><th>Status</th></tr>
+    </table>
+
+    <div id="stats">Hit Rate: — | ROI: —</div>
+    <canvas id="chart"></canvas>
+
+    <script>
+        const API_KEY = 'fb9b429fc619754e0ce3ad2a9e5be39b'; // TWÓJ KLUCZ
+        const API_URL = 'https://v3.football.api-sports.io';
+        let predictions = [];
+        let chartInstance = null;
+
+        // 1. Pobierz mecze na dziś + statystyki
+        async function loadPredictions() {
+            document.getElementById('loader').style.display = 'inline-block';
+            const table = document.getElementById('predictions');
+            table.innerHTML = '<tr><th>Mecz</th><th>Liga</th><th>% Over 9.5</th><th>Średnia Rożnych</th><th>Status</th></tr>';
+
+            try {
+                const today = new Date().toISOString().split('T')[0];
+                const res = await fetch(`${API_URL}/fixtures?date=${today}&timezone=Europe/Warsaw`, {
+                    headers: { 'x-apisports-key': API_KEY }
+                });
+                const data = await res.json();
+                const fixtures = data.response.slice(0, 20); // TOP 20 meczy
+
+                predictions = [];
+                for (let fix of fixtures) {
+                    const home = fix.teams.home.name;
+                    const away = fix.teams.away.name;
+                    const league = fix.league.name;
+                    const id = fix.fixture.id;
+
+                    // Pobierz staty (corners)
+                    const statsRes = await fetch(`${API_URL}/fixtures/statistics?fixture=${id}`, {
+                        headers: { 'x-apisports-key': API_KEY }
+                    });
+                    const statsData = await statsRes.json();
+                    if (!statsData.response.length) continue;
+
+                    const homeStats = statsData.response[0].statistics;
+                    const awayStats = statsData.response[1].statistics;
+
+                    const homeCorners = getStat(homeStats, 'Corner Kicks') || 0;
+                    const awayCorners = getStat(awayStats, 'Corner Kicks') || 0;
+                    const totalCorners = homeCorners + awayCorners;
+
+                    // Oblicz % over (symulacja na podstawie historycznych avg)
+                    const avg = ((homeCorners + awayCorners) / 2) * 2.2; // przybliżenie FT
+                    const prob = Math.min(95, 50 + (avg - 8) * 15); // heurystyka
+
+                    predictions.push({
+                        match: `${home} vs ${away}`,
+                        league,
+                        prob: Math.round(prob),
+                        avg: avg.toFixed(1),
+                        corners: totalCorners,
+                        status: 'W trakcie',
+                        id
+                    });
+                }
+
+                // Sortuj i pokaż TOP 5
+                predictions.sort((a, b) => b.prob - a.prob);
+                predictions.slice(0, 5).forEach(p => addRow(p));
+                updateStats();
+            } catch (e) {
+                alert('Błąd API: ' + e.message);
+            }
+            document.getElementById('loader').style.display = 'none';
+        }
+
+        function getStat(stats, name) {
+            const stat = stats.find(s => s.type === name);
+            return stat ? stat.value : 0;
+        }
+
+        function addRow(p) {
+            const table = document.getElementById('predictions');
+            const tr = table.insertRow();
+            tr.innerHTML = `
+                <td>${p.match}</td>
+                <td>${p.league}</td>
+                <td><strong>${p.prob}%</strong></td>
+                <td>${p.avg}</td>
+                <td class="pending" id="status-${p.id}">W trakcie</td>
+            `;
+        }
+
+        // 2. Weryfikacja wyników
+        async function verifyResults() {
+            let hits = 0, total = 0;
+            for (let p of predictions.slice(0, 5)) {
+                try {
+                    const res = await fetch(`${API_URL}/fixtures?id=${p.id}`, {
+                        headers: { 'x-apisports-key': API_KEY }
+                    });
+                    const data = await res.json();
+                    const fix = data.response[0];
+                    if (fix.fixture.status.short === 'FT') {
+                        const statsRes = await fetch(`${API_URL}/fixtures/statistics?fixture=${p.id}`, {
+                            headers: { 'x-apisports-key': API_KEY }
+                        });
+                        const stats = await statsRes.json();
+                        if (stats.response.length) {
+                            const hc = getStat(stats.response[0].statistics, 'Corner Kicks');
+                            const ac = getStat(stats.response[1].statistics, 'Corner Kicks');
+                            const total = (hc || 0) + (ac || 0);
+                            const isOver = total > 9.5;
+                            const statusEl = document.getElementById(`status-${p.id}`);
+                            if (statusEl) {
+                                statusEl.textContent = isOver ? 'OVER 9.5' : `UNDER (${total})`;
+                                statusEl.parentElement.className = isOver ? 'hit' : 'miss';
+                            }
+                            if (isOver) hits++;
+                            total++;
+                        }
+                    }
+                } catch (e) { console.log(e); }
+            }
+            updateStats(hits, total);
+        }
+
+        function updateStats(hits = 0, total = 0) {
+            const hitRate = total > 0 ? Math.round((hits / total) * 100) : 0;
+            const roi = total > 0 ? ((hits * 1.85) - (total - hits)).toFixed(2) : 0;
+            document.getElementById('stats').innerHTML = `
+                <strong>Hit Rate: ${hitRate}%</strong> | 
+                <strong>ROI: ${roi > 0 ? '+' : ''}${roi} zł</strong> (kurs śr. 1.85)
+            `;
+            updateChart(hits, total);
+        }
+
+        function updateChart(hits, total) {
+            const ctx = document.getElementById('chart').getContext('2d');
+            if (chartInstance) chartInstance.destroy();
+            chartInstance = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Trafienia', 'Pudła'],
+                    datasets: [{
+                        data: [hits, total - hits],
+                        backgroundColor: ['#4CAF50', '#f44336'],
+                        borderWidth: 2,
+                        borderColor: '#fff'
+                    }]
+                },
+                options: { responsive: true, plugins: { legend: { position: 'bottom' } } }
+            });
+        }
+
+        // Auto-refresh co 10 min
+        setInterval(verifyResults, 600000);
+    </script>
+</body>
+</html>
