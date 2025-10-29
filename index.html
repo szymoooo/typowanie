@@ -418,6 +418,7 @@
                 const matches = finishedFixtures.slice(0, 5).map((match, index) => {
                     console.log(`\n📋 Mecz ${index + 1}: ${match.name}`);
                     console.log(`   ID: ${match.id}, Data: ${match.starting_at}`);
+                    console.log(`   🆔 Szukam rożnych dla team_id: ${teamId}`);
                     
                     const stats = match.statistics || [];
                     console.log(`   📊 Statystyk: ${stats.length}`);
@@ -426,21 +427,23 @@
                         // Pokaż pierwsze 3 statystyki jako przykład
                         console.log(`   🔍 Przykładowe statystyki:`, stats.slice(0, 3));
                         
-                        // Pokaż wszystkie type_id i nazwy
+                        // Pokaż wszystkie type_id i nazwy Z participant_id
                         const types = stats.map(s => ({
                             type_id: s.type_id,
+                            participant_id: s.participant_id,
                             type_name: s.type?.name || 'N/A',
                             data: s.data
                         }));
                         console.log(`   🏷️ Wszystkie typy:`, types);
                     }
                     
-                    // Szukaj rożnych (możliwe warianty)
+                    // Szukaj rożnych DLA TEJ DRUŻYNY (sprawdź participant_id!)
+                    // type_id: 34 = Corners w Sportmonks v3
                     const corners = stats.find(s => 
-                        s.type_id === 12 || 
-                        s.type_id === 70 ||  // inne możliwe ID
-                        s.type?.name?.toLowerCase().includes('corner') ||
-                        s.type?.name?.toLowerCase().includes('rożn')
+                        (s.type_id === 12 || s.type_id === 34 || s.type_id === 70 || 
+                         s.type?.name?.toLowerCase().includes('corner') ||
+                         s.type?.name?.toLowerCase().includes('rożn')) &&
+                        s.participant_id === teamId  // ← KLUCZOWE: tylko statystyki tej drużyny!
                     );
                     
                     if (corners) {
