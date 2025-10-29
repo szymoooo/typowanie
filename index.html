@@ -629,8 +629,27 @@
                 console.log('📦 Odpowiedź Sportmonks:', data);
                 
                 if (data.data && data.data.length > 0) {
-                    const matches = data.data;
-                    console.log(`✅ Sportmonks: Znaleziono ${matches.length} meczów`);
+                    let allMatches = data.data;
+                    console.log(`📥 Sportmonks: Pobrano ${allMatches.length} meczów z API`);
+                    
+                    // FILTRUJ tylko mecze z dzisiaj (w lokalnej strefie czasowej)
+                    const todayStart = new Date();
+                    todayStart.setHours(0, 0, 0, 0);
+                    const todayEnd = new Date();
+                    todayEnd.setHours(23, 59, 59, 999);
+                    
+                    const matches = allMatches.filter(match => {
+                        if (!match.starting_at) return false;
+                        const matchDate = new Date(match.starting_at);
+                        const isToday = matchDate >= todayStart && matchDate <= todayEnd;
+                        if (!isToday) {
+                            console.log(`⏭️ POMIJAM (nie dzisiaj):`, match.name, '| Data meczu:', matchDate.toLocaleString('pl-PL'));
+                        }
+                        return isToday;
+                    });
+                    
+                    console.log(`✅ Sportmonks: Po filtrowaniu zostało ${matches.length} meczów z dzisiaj (${today})`);
+                    console.log(`📅 Zakres dzisiejszych dat: ${todayStart.toLocaleString('pl-PL')} - ${todayEnd.toLocaleString('pl-PL')}`);
                     
                     // Zlicz unikalne ligi
                     const uniqueLeagues = new Set();
@@ -647,7 +666,7 @@
                     let html = `<tr>
                         <th>Mecz</th>
                         <th>Liga</th>
-                        <th>Godzina</th>
+                        <th>Status</th>
                     </tr>`;
                     
                     // Sortuj po lidze, potem po godzinie
@@ -663,11 +682,30 @@
                         const matchName = match.name || 'Unknown vs Unknown';
                         const leagueName = match.league?.name || 'Unknown League';
                         
-                        // Parsuj godzinę
+                        // Sprawdź status meczu (zakończony, trwający, zaplanowany)
+                        const state = match.state?.state || match.state || '';
+                        const isFinished = state === 'FT' || 
+                                          state === 'finished' || 
+                                          state === 'complete' ||
+                                          state === 'FT_PEN' ||
+                                          state === 'AET';
+                        const isLive = state === 'LIVE' || 
+                                      state === 'HT' || 
+                                      state === '1H' || 
+                                      state === '2H' ||
+                                      state === 'inplay';
+                        
+                        // Parsuj godzinę lub status
                         let time = '-';
-                        if (match.starting_at) {
-                            const date = new Date(match.starting_at);
-                            time = date.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' });
+                        if (isFinished) {
+                            time = '✅ KONIEC';
+                        } else if (isLive) {
+                            time = '🔴 LIVE';
+                        } else {
+                            if (match.starting_at) {
+                                const date = new Date(match.starting_at);
+                                time = date.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' });
+                            }
                         }
                         
                         html += `<tr>
@@ -720,14 +758,40 @@
                 console.log('📦 Odpowiedź FootyStats:', data);
                 
                 if (data.data && Array.isArray(data.data) && data.data.length > 0) {
-                    const matches = data.data;
-                    console.log(`✅ FootyStats: Znaleziono ${matches.length} meczów`);
+                    let allMatches = data.data;
+                    console.log(`📥 FootyStats: Pobrano ${allMatches.length} meczów z API`);
                     
                     // DEBUG: Sprawdź strukturę pierwszego meczu
-                    if (matches.length > 0) {
-                        console.log('📊 STRUKTURA PIERWSZEGO MECZU (FootyStats):', matches[0]);
-                        console.log('📊 Wszystkie klucze meczu:', Object.keys(matches[0]));
+                    if (allMatches.length > 0) {
+                        console.log('📊 STRUKTURA PIERWSZEGO MECZU (FootyStats):', allMatches[0]);
+                        console.log('📊 Wszystkie klucze meczu:', Object.keys(allMatches[0]));
                     }
+                    
+                    // FILTRUJ tylko mecze z dzisiaj (w lokalnej strefie czasowej)
+                    const todayStart = new Date();
+                    todayStart.setHours(0, 0, 0, 0);
+                    const todayEnd = new Date();
+                    todayEnd.setHours(23, 59, 59, 999);
+                    
+                    const matches = allMatches.filter(match => {
+                        let matchDate;
+                        if (match.date_unix) {
+                            matchDate = new Date(match.date_unix * 1000);
+                        } else if (match.date) {
+                            matchDate = new Date(match.date);
+                        } else {
+                            return false; // Brak daty - odrzuć
+                        }
+                        
+                        const isToday = matchDate >= todayStart && matchDate <= todayEnd;
+                        if (!isToday) {
+                            console.log(`⏭️ POMIJAM (nie dzisiaj):`, match.home_name || match.home?.name, 'vs', match.away_name || match.away?.name, '| Data meczu:', matchDate.toLocaleString('pl-PL'));
+                        }
+                        return isToday;
+                    });
+                    
+                    console.log(`✅ FootyStats: Po filtrowaniu zostało ${matches.length} meczów z dzisiaj (${today})`);
+                    console.log(`📅 Zakres dzisiejszych dat: ${todayStart.toLocaleString('pl-PL')} - ${todayEnd.toLocaleString('pl-PL')}`);
                     
                     // Zlicz unikalne ligi
                     const uniqueLeagues = new Set();
@@ -750,7 +814,7 @@
                     let html = `<tr>
                         <th>Mecz</th>
                         <th>Liga</th>
-                        <th>Godzina</th>
+                        <th>Status</th>
                     </tr>`;
                     
                     // Sortuj po lidze, potem po godzinie
@@ -774,14 +838,28 @@
                                           match.competition ||
                                           'Unknown League';
                         
-                        // Parsuj godzinę
+                        // Sprawdź status meczu (zakończony, trwający, zaplanowany)
+                        const status = match.status || match.match_status || '';
+                        const isFinished = status === 'complete' || 
+                                          status === 'finished' || 
+                                          status === 'FT' || 
+                                          match.finished === true ||
+                                          (match.homeGoalCount !== undefined && match.awayGoalCount !== undefined && status !== 'live');
+                        
+                        // Parsuj godzinę lub status
                         let time = '-';
-                        if (match.date_unix) {
-                            const date = new Date(match.date_unix * 1000);
-                            time = date.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' });
-                        } else if (match.date) {
-                            const date = new Date(match.date);
-                            time = date.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' });
+                        if (isFinished) {
+                            time = '✅ KONIEC';
+                        } else if (status === 'live' || status === 'inplay' || status === 'LIVE') {
+                            time = '🔴 LIVE';
+                        } else {
+                            if (match.date_unix) {
+                                const date = new Date(match.date_unix * 1000);
+                                time = date.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' });
+                            } else if (match.date) {
+                                const date = new Date(match.date);
+                                time = date.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' });
+                            }
                         }
                         
                         html += `<tr>
