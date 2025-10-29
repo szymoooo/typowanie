@@ -761,9 +761,25 @@
             // KROK 1: Pobierz z league-list
             try {
                 const res1 = await fetch(url1);
+                
+                // Sprawdź status i contentType przed parsowaniem
+                if (!res1.ok) {
+                    console.warn(`⚠️ /league-list zwróciło status ${res1.status}`);
+                    if (res1.status === 403) {
+                        console.error('⛔ CORS Proxy zablokowany przez Cloudflare (403)');
+                    }
+                    throw new Error(`HTTP ${res1.status}`);
+                }
+                
+                const contentType = res1.headers.get('content-type');
+                if (!contentType || !contentType.includes('application/json')) {
+                    const textResponse = await res1.text();
+                    console.error('❌ Odpowiedź nie jest JSON (prawdopodobnie HTML z błędem):', textResponse.substring(0, 200));
+                    throw new Error('Odpowiedź nie jest JSON');
+                }
+                
                 const data1 = await res1.json();
                 
-                console.log('📦 Odpowiedź /league-list (pełna struktura):', data1);
                 console.log('📦 Odpowiedź /league-list (ilość lig w odpowiedzi):', data1.data?.length || 0);
                 
                 // Sprawdź różne możliwe struktury odpowiedzi
@@ -786,24 +802,39 @@
                         const leagueName = league.name || league.league_name || league.competition_name || 'Unknown';
                         const countryName = league.country || league.country_name || '';
                         const fullName = countryName ? `${leagueName} (${countryName})` : leagueName;
-                        
-                        if (leagueId) {
-                            footyStatsLeagues[leagueId] = fullName;
-                        } else {
-                            console.warn(`⚠️ Liga bez ID (index ${index}):`, league);
-                        }
-                    });
+                    
+                    if (leagueId) {
+                        footyStatsLeagues[leagueId] = fullName;
+                    } else {
+                        console.warn(`⚠️ Liga bez ID (index ${index}):`, league);
+                    }
+                });
                     console.log(`✅ Załadowano ${Object.keys(footyStatsLeagues).length} lig z /league-list`);
-                } else {
+            } else {
                     console.error('❌ Nie można znaleźć tablicy lig w odpowiedzi:', data1);
                 }
             } catch (e) {
-                console.warn('⚠️ Błąd pobierania z /league-list:', e);
+                console.warn('⚠️ Błąd pobierania z /league-list:', e.message);
+                console.warn('   Używam tylko API po ID dla poszczególnych lig');
             }
             
             // KROK 2: Pobierz z competition-list (jeśli istnieje) i dodaj do mapy
             try {
                 const res2 = await fetch(url2);
+                
+                // Sprawdź status i contentType przed parsowaniem
+                if (!res2.ok) {
+                    console.warn(`⚠️ /competition-list zwróciło status ${res2.status}`);
+                    throw new Error(`HTTP ${res2.status}`);
+                }
+                
+                const contentType2 = res2.headers.get('content-type');
+                if (!contentType2 || !contentType2.includes('application/json')) {
+                    const textResponse = await res2.text();
+                    console.warn('⚠️ Odpowiedź /competition-list nie jest JSON:', textResponse.substring(0, 100));
+                    throw new Error('Odpowiedź nie jest JSON');
+                }
+                
                 const data2 = await res2.json();
                 
                 console.log('📦 Odpowiedź /competition-list (ilość lig w odpowiedzi):', data2.data?.length || 0);
@@ -824,7 +855,7 @@
                     console.log(`✅ Dodano ${addedCount} lig z /competition-list`);
                 }
             } catch (e) {
-                console.warn('⚠️ Endpoint /competition-list nie istnieje lub błąd:', e);
+                console.warn('⚠️ Endpoint /competition-list nie istnieje lub błąd:', e.message);
             }
             
             console.log(`✅ RAZEM załadowano ${Object.keys(footyStatsLeagues).length} lig FootyStats do mapy`);
@@ -856,6 +887,11 @@
                     const res = await fetch(url);
                     
                     if (!res.ok) continue; // Próbuj następny endpoint
+                    
+                    const contentType = res.headers.get('content-type');
+                    if (!contentType || !contentType.includes('application/json')) {
+                        continue; // Nie jest JSON - próbuj następny endpoint
+                    }
                     
                     const data = await res.json();
                     
@@ -911,19 +947,53 @@
                 
                 // Próbuj endpoint z datą
                 let res = await fetch(url2);
-                let data = await res.json();
                 
-                console.log('📦 TEST 2 - Odpowiedź FootyStats (matches?date=):', data);
-                
-                // Jeśli nie działa, użyj standardowego
-                if (!data.data || data.data.length === 0 || data.success === false) {
-                    console.log('⚠️ TEST 2 nie działa, próbuję TEST 1...');
-                    res = await fetch(url1);
-                    data = await res.json();
-                    console.log('📦 TEST 1 - Odpowiedź FootyStats (todays-matches):', data);
+                // Sprawdź status i contentType przed parsowaniem
+                let data = null;
+                if (res.ok) {
+                    const contentType = res.headers.get('content-type');
+                    if (contentType && contentType.includes('application/json')) {
+                        try {
+                            data = await res.json();
+                        } catch (e) {
+                            console.warn('⚠️ Błąd parsowania JSON z TEST 2:', e.message);
+                            data = null;
+                        }
+                    }
                 }
                 
-                if (data.data && Array.isArray(data.data) && data.data.length > 0) {
+                console.log('📦 TEST 2 - Status:', res.status, '| Odpowiedź:', data ? 'OK' : 'BRAK DANYCH');
+                
+                // Jeśli nie działa, użyj standardowego
+                if (!data || !data.data || data.data.length === 0 || data.success === false) {
+                    console.log('⚠️ TEST 2 nie działa, próbuję TEST 1...');
+                    res = await fetch(url1);
+                    
+                    if (res.ok) {
+                        const contentType = res.headers.get('content-type');
+                        if (contentType && contentType.includes('application/json')) {
+                            try {
+                    data = await res.json();
+                            } catch (e) {
+                                console.error('❌ Błąd parsowania JSON z TEST 1:', e.message);
+                                throw new Error('Nie można pobrać meczów z FootyStats (błąd parsowania JSON)');
+                            }
+                        } else {
+                            const textResponse = await res.text();
+                            console.error('❌ TEST 1 zwrócił nie-JSON:', textResponse.substring(0, 200));
+                            throw new Error('Nie można pobrać meczów z FootyStats (odpowiedź nie jest JSON)');
+                        }
+                    } else {
+                        console.error(`❌ TEST 1 zwrócił status ${res.status}`);
+                        throw new Error(`Nie można pobrać meczów z FootyStats (HTTP ${res.status})`);
+                    }
+                    console.log('📦 TEST 1 - Odpowiedź FootyStats (todays-matches):', data ? 'OK' : 'BRAK DANYCH');
+                }
+                
+                if (!data || !data.data || !Array.isArray(data.data) || data.data.length === 0) {
+                    throw new Error('Brak danych meczów w odpowiedzi FootyStats');
+                }
+                
                     let allMatches = data.data;
                     console.log(`📥 FootyStats: Pobrano ${allMatches.length} meczów z API`);
                     
@@ -957,202 +1027,197 @@
                         console.log('⚽ Finished:', allMatches[0].finished);
                         console.log('⚽ homeGoalCount:', allMatches[0].homeGoalCount);
                         console.log('⚽ awayGoalCount:', allMatches[0].awayGoalCount);
-                    }
-                    
-                    // ✅ FILTRUJ PO DATIE - tylko mecze z dzisiejszego dnia (00:00-23:59)
-                    const todayStart = new Date(today + 'T00:00:00').getTime() / 1000; // Unix timestamp początku dnia
-                    const todayEnd = new Date(today + 'T23:59:59').getTime() / 1000; // Unix timestamp końca dnia
-                    
-                    console.log(`📅 Filtrowanie meczów: tylko z dnia ${today}`);
-                    console.log(`   Przedział czasowy: ${todayStart} - ${todayEnd} (Unix)`);
-                    console.log(`   Przedział lokalny: ${new Date(todayStart * 1000).toLocaleString('pl-PL')} - ${new Date(todayEnd * 1000).toLocaleString('pl-PL')}`);
-                    
-                    const matches = allMatches.filter(match => {
-                        const matchDateUnix = match.date_unix || match.date_unix_timestamp || 0;
-                        if (!matchDateUnix) {
-                            console.warn(`⚠️ Mecz bez date_unix:`, match);
-                            return false;
-                        }
-                        const isToday = matchDateUnix >= todayStart && matchDateUnix <= todayEnd;
-                        if (!isToday) {
-                            const matchDate = new Date(matchDateUnix * 1000);
-                            console.log(`   ❌ Pomijam mecz z ${matchDate.toLocaleString('pl-PL')}`);
-                        }
-                        return isToday;
-                    });
-                    
-                    console.log(`✅ FootyStats: Po filtrowaniu zostało ${matches.length} meczów z dnia ${today} (z ${allMatches.length} pobranych)`);
-                    console.log(`🌍 Data lokalna użytkownika: ${new Date().toLocaleString('pl-PL')}`);
-                    
-                    // ✅ KROK: Pobierz nazwy lig dla wszystkich ID które nie są w mapie
-                    const uniqueLeagueIds = [...new Set(matches.map(m => m.competition_id || m.league_id || m.leagueId || m.competitionID).filter(Boolean))];
-                    console.log(`🔍 Znaleziono ${uniqueLeagueIds.length} unikalnych ID lig w meczach`);
-                    
-                    // Dla każdego ID które nie jest w mapie, spróbuj pobrać nazwę z API
-                    console.log('📡 Pobieranie nazw lig dla brakujących ID...');
-                    for (const leagueId of uniqueLeagueIds) {
-                        if (!leaguesMap[leagueId]) {
-                            try {
-                                const leagueName = await getFootyStatsLeagueNameById(leagueId);
-                                if (leagueName) {
-                                    console.log(`   ✅ Znaleziono: ID ${leagueId} = ${leagueName}`);
-                                } else {
-                                    console.log(`   ⚠️ Nie znaleziono nazwy dla ID ${leagueId}`);
-                                }
-                            } catch (e) {
-                                console.warn(`   ❌ Błąd pobierania ligi ${leagueId}:`, e);
-                            }
-                            // Małe opóźnienie żeby nie przeciążyć API
-                            await new Promise(resolve => setTimeout(resolve, 100));
-                        }
-                    }
-                    
-                    // DEBUG: Sprawdź pierwsze 5 ID lig z meczów i czy są w mapie
-                    console.log('🔍 DEBUG MAPOWANIA LIG (po pobraniu):');
-                    const testLeagueIds = uniqueLeagueIds.slice(0, 10);
-                    testLeagueIds.forEach(leagueId => {
-                        const leagueName = leaguesMap[leagueId];
-                        console.log(`   ID ${leagueId}: ${leagueName || '❌ NIE ZNALEZIONO W MAPIE'}`);
-                    });
-                    console.log(`📊 Mapa lig zawiera ${Object.keys(leaguesMap).length} lig`);
-                    
-                    // Zlicz unikalne ligi (używając mapy ID -> nazwa)
-                    const uniqueLeagues = new Set();
-                    matches.forEach(match => {
-                        const leagueId = match.competition_id || match.league_id || match.leagueId || match.competitionID;
-                        if (leagueId && leaguesMap[leagueId]) {
-                            uniqueLeagues.add(leaguesMap[leagueId]);
-                        } else if (leagueId) {
-                            // Jeśli ID nie jest w mapie, użyj ID jako nazwy (zamiast Unknown)
-                            uniqueLeagues.add(`Liga ID: ${leagueId}`);
-                        } else {
-                            uniqueLeagues.add('Unknown League');
-                        }
-                    });
-                    
-                    // Wyświetl mecze w tabeli
-                    const table = document.getElementById('predictions');
-                    table.style.display = 'table';
-                    
-                    let html = `<tr>
-                        <th>Lp.</th>
-                        <th>Mecz</th>
-                        <th>Liga</th>
-                        <th>Status</th>
-                    </tr>`;
-                    
-                    // Sortuj po lidze, potem po godzinie (używając mapy ID -> nazwa)
-                    const sortedMatches = matches.sort((a, b) => {
-                        const leagueIdA = a.competition_id || a.league_id || a.leagueId || a.competitionID;
-                        const leagueIdB = b.competition_id || b.league_id || b.leagueId || b.competitionID;
-                        const leagueA = (leagueIdA && leaguesMap[leagueIdA]) ? leaguesMap[leagueIdA] : 'ZZZ';
-                        const leagueB = (leagueIdB && leaguesMap[leagueIdB]) ? leaguesMap[leagueIdB] : 'ZZZ';
-                        if (leagueA !== leagueB) return leagueA.localeCompare(leagueB);
-                        return (a.date_unix || 0) - (b.date_unix || 0);
-                    });
-                    
-                    let debugCount = 0;
-                    let matchNumber = 1;
-                    sortedMatches.forEach(match => {
-                        // Parsuj nazwę meczu
-                        const homeName = match.home_name || match.home?.name || match.homeTeam || 'Unknown';
-                        const awayName = match.away_name || match.away?.name || match.awayTeam || 'Unknown';
-                        const matchName = `${homeName} vs ${awayName}`;
-                        
-                        // Pobierz nazwę ligi z mapy (używając ID ligi) - użyj zaktualizowanej mapy po pobraniu nazw
-                        const leagueId = match.competition_id || match.league_id || match.leagueId || match.competitionID;
-                        let leagueName = 'Unknown League';
-                        if (leagueId) {
-                            // Sprawdź najpierw w zaktualizowanej mapie
-                            leagueName = leaguesMap[leagueId] || `Liga ID: ${leagueId}`;
-                        }
-                        
-                        // DEBUG: Pierwsze 3 mecze - pokaż wszystkie pola związane ze statusem i ligą
-                        if (debugCount < 3) {
-                            console.log(`🔍 DEBUG MECZ ${debugCount + 1}: ${matchName}`);
-                            console.log('   🏆 League ID:', leagueId);
-                            console.log('   🏆 League Name (z mapy):', leagueName);
-                            console.log('   status:', match.status);
-                            console.log('   match_status:', match.match_status);
-                            console.log('   finished:', match.finished);
-                            console.log('   homeGoalCount:', match.homeGoalCount);
-                            console.log('   awayGoalCount:', match.awayGoalCount);
-                            console.log('   date_unix:', match.date_unix);
-                            console.log('   Czy ma bramki?', match.homeGoalCount !== undefined && match.awayGoalCount !== undefined);
-                            debugCount++;
-                        }
-                        
-                        // Sprawdź status meczu (zakończony, trwający, zaplanowany)
-                        const status = match.status || match.match_status || '';
-                        const isFinished = status === 'complete' || 
-                                          status === 'finished' || 
-                                          status === 'FT';
-                        
-                        // Mecz LIVE jeśli:
-                        // 1. Status jawnie to mówi
-                        // 2. Status 'incomplete' + mecz już się rozpoczął (date_unix < teraz) + jest min. 5 min po starcie
-                        const now = Math.floor(Date.now() / 1000);
-                        const matchStarted = match.date_unix && (now > match.date_unix + 300); // 5 min po starcie
-                        const isLive = status === 'live' || 
-                                      status === 'inplay' || 
-                                      status === 'LIVE' ||
-                                      (status === 'incomplete' && matchStarted);
-                        
-                        // Parsuj godzinę lub status
-                        let time = '-';
-                        if (isFinished) {
-                            time = '✅ KONIEC';
-                        } else if (isLive) {
-                            time = '🔴 LIVE';
-                        } else {
-                            if (match.date_unix) {
-                                const date = new Date(match.date_unix * 1000);
-                                time = date.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' });
-                            } else if (match.date) {
-                                const date = new Date(match.date);
-                                time = date.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' });
-                            }
-                        }
-                        
-                        html += `<tr>
-                            <td>${matchNumber}</td>
-                            <td><strong>${matchName}</strong></td>
-                            <td>${leagueName}</td>
-                            <td>${time}</td>
-                        </tr>`;
-                        matchNumber++;
-                    });
-                    
-                    table.innerHTML = html;
-                    
-                    document.getElementById('info').innerHTML = `
-                        ✅ <strong>FOOTYSTATS</strong> - Znaleziono <strong>${matches.length} meczów</strong> z <strong>${uniqueLeagues.size} lig</strong><br>
-                        <small style="color:#aaa;">📅 Data: ${today} | Tabela przewijalna jeśli jest wiele meczów</small>
-                    `;
-                    
-                    // Wyświetl szczegóły w konsoli (używając mapy)
-                    console.log('📋 WSZYSTKIE MECZE (FootyStats):');
-                    // Utwórz mapę ID -> nazwa ligi dla wszystkich unikalnych lig
-                    const leagueIdToName = {};
-                    uniqueLeagueIds.forEach(leagueId => {
-                        const leagueName = leaguesMap[leagueId] || `Liga ID: ${leagueId}`;
-                        leagueIdToName[leagueId] = leagueName;
-                    });
-                    
-                    // Wyświetl statystyki po ID (nie po nazwie, bo nazwy mogą się powtarzać)
-                    uniqueLeagueIds.forEach(leagueId => {
-                        const leagueName = leagueIdToName[leagueId];
-                        const leagueMatches = matches.filter(m => {
-                            const mLeagueId = m.competition_id || m.league_id || m.leagueId || m.competitionID;
-                            return mLeagueId === leagueId;
-                        });
-                        console.log(`${leagueName}: ${leagueMatches.length} meczów`);
-                    });
-                    
-                } else {
-                    document.getElementById('info').textContent = '❌ Brak meczów lub problem z FootyStats API';
-                    console.error('Brak meczów w odpowiedzi:', data);
                 }
+                
+                // ✅ FILTRUJ PO DATIE - tylko mecze z dzisiejszego dnia (00:00-23:59)
+                const todayStart = new Date(today + 'T00:00:00').getTime() / 1000; // Unix timestamp początku dnia
+                const todayEnd = new Date(today + 'T23:59:59').getTime() / 1000; // Unix timestamp końca dnia
+                
+                console.log(`📅 Filtrowanie meczów: tylko z dnia ${today}`);
+                console.log(`   Przedział czasowy: ${todayStart} - ${todayEnd} (Unix)`);
+                console.log(`   Przedział lokalny: ${new Date(todayStart * 1000).toLocaleString('pl-PL')} - ${new Date(todayEnd * 1000).toLocaleString('pl-PL')}`);
+                
+                const matches = allMatches.filter(match => {
+                    const matchDateUnix = match.date_unix || match.date_unix_timestamp || 0;
+                    if (!matchDateUnix) {
+                        console.warn(`⚠️ Mecz bez date_unix:`, match);
+                        return false;
+                    }
+                    const isToday = matchDateUnix >= todayStart && matchDateUnix <= todayEnd;
+                    if (!isToday) {
+                        const matchDate = new Date(matchDateUnix * 1000);
+                        console.log(`   ❌ Pomijam mecz z ${matchDate.toLocaleString('pl-PL')}`);
+                    }
+                    return isToday;
+                });
+                
+                console.log(`✅ FootyStats: Po filtrowaniu zostało ${matches.length} meczów z dnia ${today} (z ${allMatches.length} pobranych)`);
+                console.log(`🌍 Data lokalna użytkownika: ${new Date().toLocaleString('pl-PL')}`);
+                
+                // ✅ KROK: Pobierz nazwy lig dla wszystkich ID które nie są w mapie
+                const uniqueLeagueIds = [...new Set(matches.map(m => m.competition_id || m.league_id || m.leagueId || m.competitionID).filter(Boolean))];
+                console.log(`🔍 Znaleziono ${uniqueLeagueIds.length} unikalnych ID lig w meczach`);
+                
+                // Dla każdego ID które nie jest w mapie, spróbuj pobrać nazwę z API
+                console.log('📡 Pobieranie nazw lig dla brakujących ID...');
+                for (const leagueId of uniqueLeagueIds) {
+                    if (!leaguesMap[leagueId]) {
+                        try {
+                            const leagueName = await getFootyStatsLeagueNameById(leagueId);
+                            if (leagueName) {
+                                console.log(`   ✅ Znaleziono: ID ${leagueId} = ${leagueName}`);
+                            } else {
+                                console.log(`   ⚠️ Nie znaleziono nazwy dla ID ${leagueId}`);
+                            }
+                        } catch (e) {
+                            console.warn(`   ❌ Błąd pobierania ligi ${leagueId}:`, e);
+                        }
+                        // Małe opóźnienie żeby nie przeciążyć API
+                        await new Promise(resolve => setTimeout(resolve, 100));
+                    }
+                }
+                
+                // DEBUG: Sprawdź pierwsze 5 ID lig z meczów i czy są w mapie
+                console.log('🔍 DEBUG MAPOWANIA LIG (po pobraniu):');
+                const testLeagueIds = uniqueLeagueIds.slice(0, 10);
+                testLeagueIds.forEach(leagueId => {
+                    const leagueName = leaguesMap[leagueId];
+                    console.log(`   ID ${leagueId}: ${leagueName || '❌ NIE ZNALEZIONO W MAPIE'}`);
+                });
+                console.log(`📊 Mapa lig zawiera ${Object.keys(leaguesMap).length} lig`);
+                
+                // Zlicz unikalne ligi (używając mapy ID -> nazwa)
+                const uniqueLeagues = new Set();
+                matches.forEach(match => {
+                    const leagueId = match.competition_id || match.league_id || match.leagueId || match.competitionID;
+                    if (leagueId && leaguesMap[leagueId]) {
+                        uniqueLeagues.add(leaguesMap[leagueId]);
+                    } else if (leagueId) {
+                        // Jeśli ID nie jest w mapie, użyj ID jako nazwy (zamiast Unknown)
+                        uniqueLeagues.add(`Liga ID: ${leagueId}`);
+                    } else {
+                        uniqueLeagues.add('Unknown League');
+                    }
+                });
+                
+                // Wyświetl mecze w tabeli
+                const table = document.getElementById('predictions');
+                table.style.display = 'table';
+                
+                let html = `<tr>
+                    <th>Lp.</th>
+                    <th>Mecz</th>
+                    <th>Liga</th>
+                    <th>Status</th>
+                </tr>`;
+                
+                // Sortuj po lidze, potem po godzinie (używając mapy ID -> nazwa)
+                const sortedMatches = matches.sort((a, b) => {
+                    const leagueIdA = a.competition_id || a.league_id || a.leagueId || a.competitionID;
+                    const leagueIdB = b.competition_id || b.league_id || b.leagueId || b.competitionID;
+                    const leagueA = (leagueIdA && leaguesMap[leagueIdA]) ? leaguesMap[leagueIdA] : 'ZZZ';
+                    const leagueB = (leagueIdB && leaguesMap[leagueIdB]) ? leaguesMap[leagueIdB] : 'ZZZ';
+                    if (leagueA !== leagueB) return leagueA.localeCompare(leagueB);
+                    return (a.date_unix || 0) - (b.date_unix || 0);
+                });
+                
+                let debugCount = 0;
+                let matchNumber = 1;
+                sortedMatches.forEach(match => {
+                    // Parsuj nazwę meczu
+                    const homeName = match.home_name || match.home?.name || match.homeTeam || 'Unknown';
+                    const awayName = match.away_name || match.away?.name || match.awayTeam || 'Unknown';
+                    const matchName = `${homeName} vs ${awayName}`;
+                    
+                    // Pobierz nazwę ligi z mapy (używając ID ligi) - użyj zaktualizowanej mapy po pobraniu nazw
+                    const leagueId = match.competition_id || match.league_id || match.leagueId || match.competitionID;
+                    let leagueName = 'Unknown League';
+                    if (leagueId) {
+                        // Sprawdź najpierw w zaktualizowanej mapie
+                        leagueName = leaguesMap[leagueId] || `Liga ID: ${leagueId}`;
+                    }
+                    
+                    // DEBUG: Pierwsze 3 mecze - pokaż wszystkie pola związane ze statusem i ligą
+                    if (debugCount < 3) {
+                        console.log(`🔍 DEBUG MECZ ${debugCount + 1}: ${matchName}`);
+                        console.log('   🏆 League ID:', leagueId);
+                        console.log('   🏆 League Name (z mapy):', leagueName);
+                        console.log('   status:', match.status);
+                        console.log('   match_status:', match.match_status);
+                        console.log('   finished:', match.finished);
+                        console.log('   homeGoalCount:', match.homeGoalCount);
+                        console.log('   awayGoalCount:', match.awayGoalCount);
+                        console.log('   date_unix:', match.date_unix);
+                        console.log('   Czy ma bramki?', match.homeGoalCount !== undefined && match.awayGoalCount !== undefined);
+                        debugCount++;
+                    }
+                    
+                    // Sprawdź status meczu (zakończony, trwający, zaplanowany)
+                    const status = match.status || match.match_status || '';
+                    const isFinished = status === 'complete' || 
+                                      status === 'finished' || 
+                                      status === 'FT';
+                    
+                    // Mecz LIVE jeśli:
+                    // 1. Status jawnie to mówi
+                    // 2. Status 'incomplete' + mecz już się rozpoczął (date_unix < teraz) + jest min. 5 min po starcie
+                    const now = Math.floor(Date.now() / 1000);
+                    const matchStarted = match.date_unix && (now > match.date_unix + 300); // 5 min po starcie
+                    const isLive = status === 'live' || 
+                                  status === 'inplay' || 
+                                  status === 'LIVE' ||
+                                  (status === 'incomplete' && matchStarted);
+                    
+                    // Parsuj godzinę lub status
+                    let time = '-';
+                    if (isFinished) {
+                        time = '✅ KONIEC';
+                    } else if (isLive) {
+                        time = '🔴 LIVE';
+                    } else {
+                        if (match.date_unix) {
+                            const date = new Date(match.date_unix * 1000);
+                            time = date.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' });
+                        } else if (match.date) {
+                            const date = new Date(match.date);
+                            time = date.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' });
+                        }
+                    }
+                    
+                    html += `<tr>
+                        <td>${matchNumber}</td>
+                        <td><strong>${matchName}</strong></td>
+                        <td>${leagueName}</td>
+                        <td>${time}</td>
+                    </tr>`;
+                    matchNumber++;
+                });
+                
+                table.innerHTML = html;
+                
+                document.getElementById('info').innerHTML = `
+                    ✅ <strong>FOOTYSTATS</strong> - Znaleziono <strong>${matches.length} meczów</strong> z <strong>${uniqueLeagues.size} lig</strong><br>
+                    <small style="color:#aaa;">📅 Data: ${today} | Tabela przewijalna jeśli jest wiele meczów</small>
+                `;
+                
+                // Wyświetl szczegóły w konsoli (używając mapy)
+                console.log('📋 WSZYSTKIE MECZE (FootyStats):');
+                // Utwórz mapę ID -> nazwa ligi dla wszystkich unikalnych lig
+                const leagueIdToName = {};
+                uniqueLeagueIds.forEach(leagueId => {
+                    const leagueName = leaguesMap[leagueId] || `Liga ID: ${leagueId}`;
+                    leagueIdToName[leagueId] = leagueName;
+                });
+                
+                // Wyświetl statystyki po ID (nie po nazwie, bo nazwy mogą się powtarzać)
+                uniqueLeagueIds.forEach(leagueId => {
+                    const leagueName = leagueIdToName[leagueId];
+                    const leagueMatches = matches.filter(m => {
+                        const mLeagueId = m.competition_id || m.league_id || m.leagueId || m.competitionID;
+                        return mLeagueId === leagueId;
+                    });
+                    console.log(`${leagueName}: ${leagueMatches.length} meczów`);
+                });
                 
             } catch (e) {
                 console.error('💥 BŁĄD podczas testowania FootyStats:', e);
