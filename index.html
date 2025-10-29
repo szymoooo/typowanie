@@ -745,6 +745,27 @@
         // Cache dla lig FootyStats
         let footyStatsLeagues = null;
         
+        // Statyczna mapa znanych lig (fallback gdy API nie działa)
+        const STATIC_LEAGUES_MAP = {
+            // Ligi francuskie
+            14932: 'Ligue 1 (France)',
+            14933: 'Ligue 2 (France)',
+            // Premier League (Anglia)
+            15137: 'Premier League (England)',
+            // Serie A (Włochy)
+            16112: 'Serie A (Italy)',
+            // La Liga (Hiszpania)
+            16009: 'La Liga (Spain)',
+            // Bundesliga (Niemcy)
+            16092: 'Bundesliga (Germany)',
+            // Eredivisie (Holandia)
+            16260: 'Eredivisie (Netherlands)',
+            // Inne popularne ligi
+            14231: 'Championship (England)',
+            13952: 'Premier Division (Ireland)',
+            // Dodaj więcej jeśli znasz
+        };
+        
         async function getFootyStatsLeagues() {
             if (footyStatsLeagues) {
                 console.log('✅ Używam cache lig FootyStats');
@@ -861,6 +882,18 @@
             console.log(`✅ RAZEM załadowano ${Object.keys(footyStatsLeagues).length} lig FootyStats do mapy`);
             console.log('📊 Przykładowe ligi (pierwsze 10):', Object.entries(footyStatsLeagues).slice(0, 10));
             
+            // ✅ KROK 3: Dodaj statyczną mapę jako fallback dla znanych lig
+            let staticAdded = 0;
+            Object.keys(STATIC_LEAGUES_MAP).forEach(leagueId => {
+                if (!footyStatsLeagues[leagueId]) {
+                    footyStatsLeagues[leagueId] = STATIC_LEAGUES_MAP[leagueId];
+                    staticAdded++;
+                }
+            });
+            if (staticAdded > 0) {
+                console.log(`✅ Dodano ${staticAdded} lig ze statycznej mapy (fallback)`);
+            }
+            
             return footyStatsLeagues;
         }
         
@@ -873,12 +906,25 @@
                 return footyStatsLeagues[leagueId];
             }
             
-            // Spróbuj różne endpointy API
+            // Sprawdź statyczną mapę jako fallback
+            if (STATIC_LEAGUES_MAP[leagueId]) {
+                const leagueName = STATIC_LEAGUES_MAP[leagueId];
+                // Dodaj do mapy na przyszłość
+                if (footyStatsLeagues) {
+                    footyStatsLeagues[leagueId] = leagueName;
+                }
+                console.log(`   ✅ Znaleziono w statycznej mapie: ID ${leagueId} = ${leagueName}`);
+                return leagueName;
+            }
+            
+            // Spróbuj różne endpointy API według dokumentacji FootyStats
+            // Dokumentacja: https://footystats.org/api/documentations/match-schedule-and-stats
             const endpoints = [
-                `/competition/${leagueId}`,
-                `/league/${leagueId}`,
-                `/league-info/${leagueId}`,
-                `/competition-info/${leagueId}`
+                `/competition/${leagueId}`,           // Główny endpoint dla competition
+                `/league/${leagueId}`,               // Alternatywny endpoint
+                `/competitions/${leagueId}`,         // Wersja liczby mnogiej
+                `/league-detail/${leagueId}`,        // Szczegóły ligi
+                `/competition-detail/${leagueId}`    // Szczegóły competition
             ];
             
             for (const endpoint of endpoints) {
@@ -895,17 +941,24 @@
                     
                     const data = await res.json();
                     
-                    // Sprawdź różne możliwe struktury odpowiedzi
+                    // Sprawdź różne możliwe struktury odpowiedzi według dokumentacji FootyStats
                     let leagueData = null;
                     if (data.data) {
-                        leagueData = data.data;
-                    } else if (data.name || data.league_name) {
+                        leagueData = Array.isArray(data.data) ? data.data[0] : data.data;
+                    } else if (data.name || data.league_name || data.competition_name) {
                         leagueData = data;
                     }
                     
                     if (leagueData) {
-                        const leagueName = leagueData.name || leagueData.league_name || leagueData.competition_name || 'Unknown';
-                        const countryName = leagueData.country || leagueData.country_name || '';
+                        const leagueName = leagueData.name || 
+                                         leagueData.league_name || 
+                                         leagueData.competition_name || 
+                                         leagueData.title ||
+                                         'Unknown';
+                        const countryName = leagueData.country || 
+                                          leagueData.country_name || 
+                                          leagueData.countryName ||
+                                          '';
                         const fullName = countryName ? `${leagueName} (${countryName})` : leagueName;
                         
                         // Dodaj do mapy na przyszłość
@@ -913,7 +966,7 @@
                             footyStatsLeagues[leagueId] = fullName;
                         }
                         
-                        console.log(`   ✅ Endpoint ${endpoint} działa dla ID ${leagueId}`);
+                        console.log(`   ✅ Endpoint ${endpoint} działa dla ID ${leagueId} = ${fullName}`);
                         return fullName;
                     }
                 } catch (e) {
@@ -1133,8 +1186,8 @@
                     const leagueId = match.competition_id || match.league_id || match.leagueId || match.competitionID;
                     let leagueName = 'Unknown League';
                     if (leagueId) {
-                        // Sprawdź najpierw w zaktualizowanej mapie
-                        leagueName = leaguesMap[leagueId] || `Liga ID: ${leagueId}`;
+                        // Sprawdź najpierw w zaktualizowanej mapie, potem w statycznej mapie
+                        leagueName = leaguesMap[leagueId] || STATIC_LEAGUES_MAP[leagueId] || `Liga ID: ${leagueId}`;
                     }
                     
                     // DEBUG: Pierwsze 3 mecze - pokaż wszystkie pola związane ze statusem i ligą
