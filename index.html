@@ -56,7 +56,7 @@
 <body>
     <div class="container">
         <h1>Corners Predictor <span id="version">v1.01</span> <span id="loader" class="loader" style="display:none;"></span></h1>
-        <p class="subtitle">5 źródeł (API-Football OFF) | ≥50% zgoda | TEST MODE</p>
+        <p class="subtitle">🔧 DEBUG MODE - TYLKO SPORTMONKS - wszystkie inne API wyłączone</p>
 
         <div class="buttons">
             <button onclick="loadTodayMatches()">SZUKAJ MECZÓW NA DZIŚ</button>
@@ -166,7 +166,7 @@
 
         async function loadMatchesForDate(daysOffset = 0) {
             document.getElementById('loader').style.display = 'inline-block';
-            document.getElementById('info').textContent = 'Pobieranie meczów z 5 źródeł (test bez API-Football)...';
+            document.getElementById('info').textContent = '🔧 DEBUG: Testuję tylko Sportmonks API...';
             document.getElementById('predictions').style.display = 'none';
             predictions = [];
 
@@ -186,12 +186,19 @@
                 console.log('🔄 Używam Sportmonks jako głównego źródła...');
                 const sportmonksUrl = `${PROXY}https://api.sportmonks.com/v3/football/fixtures/date/${dateStr}?api_token=${SPORTMONKS_KEY}&include=participants,league`;
                 console.log('📡 Sportmonks URL:', sportmonksUrl);
+                console.log('📅 Data szukania:', dateStr);
+                
                 const smRes = await fetch(sportmonksUrl);
                 console.log('📝 Sportmonks Status:', smRes.status);
+                console.log('📝 Sportmonks Status Text:', smRes.statusText);
+                console.log('📝 Sportmonks Headers:', Array.from(smRes.headers.entries()));
+                
+                // Zawsze czytaj odpowiedź, nawet jeśli błąd
+                const smData = await smRes.json();
+                console.log('📦 Sportmonks PEŁNA ODPOWIEDŹ:', JSON.stringify(smData, null, 2));
                 
                 if (smRes.ok) {
-                    const smData = await smRes.json();
-                    console.log('📦 Sportmonks Data:', smData);
+                    console.log('✅ Sportmonks odpowiedź OK');
                     
                     if (smData.data && smData.data.length > 0) {
                         console.log(`✅ [Sportmonks] Znaleziono ${smData.data.length} meczów`);
@@ -206,11 +213,29 @@
                     }
                 } else {
                     console.error('❌ Sportmonks błąd:', smRes.status, smRes.statusText);
+                    console.error('📦 Odpowiedź błędu Sportmonks:', smData);
+                    
+                    // Sprawdź czy jest komunikat błędu w odpowiedzi
+                    if (smData.message) {
+                        console.error('💬 Komunikat błędu:', smData.message);
+                    }
+                    if (smData.errors) {
+                        console.error('⚠️ Szczegóły błędu:', smData.errors);
+                    }
                 }
                 
                 if (!fixtures || fixtures.length === 0) {
                     console.error('❌ Brak meczów ze Sportmonks');
-                    document.getElementById('info').textContent = 'Błąd: Brak meczów w Sportmonks.';
+                    console.error('🔍 Możliwe przyczyny:');
+                    console.error('   - Nieprawidłowy endpoint API');
+                    console.error('   - Nieprawidłowy format daty:', dateStr);
+                    console.error('   - Problemy z kluczem API');
+                    console.error('   - Limit zapytań osiągnięty');
+                    
+                    document.getElementById('info').innerHTML = `
+                        ❌ Błąd Sportmonks (${smRes.status})<br>
+                        Sprawdź konsolę (F12) aby zobaczyć szczegóły
+                    `;
                     document.getElementById('loader').style.display = 'none';
                     return;
                 }
@@ -235,22 +260,22 @@
 
         async function getAllProbabilities(home, away, id, league) {
             try {
-                console.log('  📡 Pobieranie z 5 źródeł (API-Football wyłączone)...');
-                const [p1, p2, p4, p5, p6] = await Promise.all([
-                    getSportmonksProb(id),
-                    getFootyStatsProb(league),
-                    // getApiFootballProb(id), // TYMCZASOWO WYŁĄCZONE
-                    getTotalCornerProb(home, away),
-                    getBetOnCornersProb(home),
-                    getCornerStatProb(home, away)
-                ]);
-                const p3 = 65; // API-Football wyłączone - wartość domyślna
-                console.log(`  1️⃣ Sportmonks: ${p1}%`);
-                console.log(`  2️⃣ FootyStats: ${p2}%`);
+                console.log('  📡 WSZYSTKIE API WYŁĄCZONE - TEST MODE - używam wartości domyślnych');
+                
+                // WSZYSTKO WYŁĄCZONE NA CZAS TESTÓW SPORTMONKS
+                const p1 = 65; // Sportmonks - wartość domyślna
+                const p2 = 62; // FootyStats - wartość domyślna
+                const p3 = 65; // API-Football - wyłączone
+                const p4 = 70; // TotalCorner - wyłączone
+                const p5 = 68; // BetOnCorners - wyłączone
+                const p6 = 66; // CornerStat - wyłączone
+                
+                console.log(`  1️⃣ Sportmonks: ${p1}% (DOMYŚLNA)`);
+                console.log(`  2️⃣ FootyStats: ${p2}% (DOMYŚLNA)`);
                 console.log(`  3️⃣ API-Football: ${p3}% (WYŁĄCZONE)`);
-                console.log(`  4️⃣ TotalCorner: ${p4}%`);
-                console.log(`  5️⃣ BetOnCorners: ${p5}%`);
-                console.log(`  6️⃣ CornerStat: ${p6}%`);
+                console.log(`  4️⃣ TotalCorner: ${p4}% (DOMYŚLNA)`);
+                console.log(`  5️⃣ BetOnCorners: ${p5}% (DOMYŚLNA)`);
+                console.log(`  6️⃣ CornerStat: ${p6}% (DOMYŚLNA)`);
                 return [p1, p2, p3, p4, p5, p6];
             } catch (e) {
                 console.error('  ❌ Błąd w getAllProbabilities:', e);
