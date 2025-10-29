@@ -66,9 +66,9 @@
         <p class="subtitle">✅ Sportmonks + FootyStats WŁĄCZONE - Podwójna weryfikacja danych!</p>
 
         <div class="buttons">
-            <button onclick="loadTodayMatches()">SZUKAJ MECZÓW NA DZIŚ</button>
-            <button onclick="checkAvailableLeagues()">POBIERZ MECZE (Sportmonks)</button>
-            <button onclick="testFootyStatsAPI()">POBIERZ MECZE (FootyStats)</button>
+            <button id="btn-today">SZUKAJ MECZÓW NA DZIŚ</button>
+            <button id="btn-sportmonks">POBIERZ MECZE (Sportmonks)</button>
+            <button id="btn-footystats">POBIERZ MECZE (FootyStats)</button>
         </div>
 
         <p id="info">Kliknij przycisk, by pobrać mecze na dziś...</p>
@@ -128,6 +128,13 @@
         
         // Uruchom przy ładowaniu strony
         loadVersion();
+        
+        // Inicjalizuj event listenery dla przycisków (zamiast inline onclick)
+        document.addEventListener('DOMContentLoaded', function() {
+            document.getElementById('btn-today').addEventListener('click', loadTodayMatches);
+            document.getElementById('btn-sportmonks').addEventListener('click', checkAvailableLeagues);
+            document.getElementById('btn-footystats').addEventListener('click', testFootyStatsAPI);
+        });
 
         // Funkcja pomocnicza do przetwarzania meczów
         async function processFixtures(fixtures) {
@@ -1123,7 +1130,7 @@
                     const cls = p.agree >= 80 ? 'high' : p.agree >= 70 ? 'medium' : '';
                     html += `<tr>
                         <td><strong>${p.match}</strong><br>
-                            <span class="expand-btn" onclick="toggleDetails('${p.id}')">📊 Pokaż historię rożnych</span>
+                            <span class="expand-btn" data-match-id="${p.id}">📊 Pokaż historię rożnych</span>
                         </td>
                         <td>${p.league}</td>
                         <td>${p.avgProb}%</td>
@@ -1133,6 +1140,14 @@
                 });
             }
             table.innerHTML = html;
+            
+            // Dodaj event listenery do przycisków (zamiast inline onclick)
+            document.querySelectorAll('.expand-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const matchId = this.getAttribute('data-match-id');
+                    toggleDetails(matchId);
+                });
+            });
             
             // Poprawna odmiana słowa "typ"
             let typText;
