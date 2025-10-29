@@ -746,6 +746,7 @@
         let footyStatsLeagues = null;
         
         // Statyczna mapa znanych lig (fallback gdy API nie działa)
+        // Mapowania na podstawie danych HTML z FootyStats: id="league_XXX" -> <span>Nazwa Ligi</span>
         const STATIC_LEAGUES_MAP = {
             // Ligi francuskie
             14932: 'Ligue 1 (France)',
@@ -760,9 +761,12 @@
             16092: 'Bundesliga (Germany)',
             // Eredivisie (Holandia)
             16260: 'Eredivisie (Netherlands)',
-            // Inne popularne ligi
-            14231: 'Championship (England)',
+            // Ligi brazylijskie (POPRAWIONE na podstawie HTML)
+            14231: 'Brazil - Serie A',
+            // Premier Division (Irlandia)
             13952: 'Premier Division (Ireland)',
+            // Austria Bundesliga (z HTML)
+            14923: 'Austria - Bundesliga',
             // Dodatkowe ligi europejskie
             16037: 'Primeira Liga (Portugal)',
             16038: 'Superliga (Denmark)',
@@ -1143,7 +1147,8 @@
                 console.log('🔍 DEBUG MAPOWANIA LIG (po pobraniu):');
                 const testLeagueIds = uniqueLeagueIds.slice(0, 10);
                 testLeagueIds.forEach(leagueId => {
-                    const leagueName = leaguesMap[leagueId];
+                    // Statyczna mapa ma priorytet
+                    const leagueName = STATIC_LEAGUES_MAP[leagueId] || leaguesMap[leagueId];
                     console.log(`   ID ${leagueId}: ${leagueName || '❌ NIE ZNALEZIONO W MAPIE'}`);
                 });
                 console.log(`📊 Mapa lig zawiera ${Object.keys(leaguesMap).length} lig`);
@@ -1153,8 +1158,8 @@
                     matches.forEach(match => {
                         const leagueId = match.competition_id || match.league_id || match.leagueId || match.competitionID;
                     if (leagueId) {
-                        // Sprawdź mapę API, potem statyczną mapę
-                        const leagueName = leaguesMap[leagueId] || STATIC_LEAGUES_MAP[leagueId];
+                        // Statyczna mapa ma priorytet (poprawne dane)
+                        const leagueName = STATIC_LEAGUES_MAP[leagueId] || leaguesMap[leagueId];
                         if (leagueName) {
                             uniqueLeagues.add(leagueName);
                         } else {
@@ -1180,8 +1185,9 @@
                     const sortedMatches = matches.sort((a, b) => {
                         const leagueIdA = a.competition_id || a.league_id || a.leagueId || a.competitionID;
                         const leagueIdB = b.competition_id || b.league_id || b.leagueId || b.competitionID;
-                        const leagueA = (leagueIdA && leaguesMap[leagueIdA]) ? leaguesMap[leagueIdA] : 'ZZZ';
-                        const leagueB = (leagueIdB && leaguesMap[leagueIdB]) ? leaguesMap[leagueIdB] : 'ZZZ';
+                        // Statyczna mapa ma priorytet
+                        const leagueA = (leagueIdA && (STATIC_LEAGUES_MAP[leagueIdA] || leaguesMap[leagueIdA])) ? (STATIC_LEAGUES_MAP[leagueIdA] || leaguesMap[leagueIdA]) : 'ZZZ';
+                        const leagueB = (leagueIdB && (STATIC_LEAGUES_MAP[leagueIdB] || leaguesMap[leagueIdB])) ? (STATIC_LEAGUES_MAP[leagueIdB] || leaguesMap[leagueIdB]) : 'ZZZ';
                         if (leagueA !== leagueB) return leagueA.localeCompare(leagueB);
                         return (a.date_unix || 0) - (b.date_unix || 0);
                     });
@@ -1198,8 +1204,8 @@
                         const leagueId = match.competition_id || match.league_id || match.leagueId || match.competitionID;
                         let leagueName = 'Unknown League';
                     if (leagueId) {
-                        // Sprawdź najpierw w zaktualizowanej mapie, potem w statycznej mapie
-                        leagueName = leaguesMap[leagueId] || STATIC_LEAGUES_MAP[leagueId] || `Liga ID: ${leagueId}`;
+                        // Sprawdź najpierw w statycznej mapie (ma priorytet - poprawne dane), potem w mapie z API
+                        leagueName = STATIC_LEAGUES_MAP[leagueId] || leaguesMap[leagueId] || `Liga ID: ${leagueId}`;
                         }
                         
                         // DEBUG: Pierwsze 3 mecze - pokaż wszystkie pola związane ze statusem i ligą
@@ -1284,13 +1290,15 @@
                 // Utwórz mapę ID -> nazwa ligi dla wszystkich unikalnych lig
                 const leagueIdToName = {};
                 uniqueLeagueIds.forEach(leagueId => {
-                    const leagueName = leaguesMap[leagueId] || STATIC_LEAGUES_MAP[leagueId] || `Liga ID: ${leagueId}`;
+                    // Statyczna mapa ma priorytet (poprawne dane)
+                    const leagueName = STATIC_LEAGUES_MAP[leagueId] || leaguesMap[leagueId] || `Liga ID: ${leagueId}`;
                     leagueIdToName[leagueId] = leagueName;
                 });
                 
                 // Wyświetl statystyki po ID (nie po nazwie, bo nazwy mogą się powtarzać)
                 uniqueLeagueIds.forEach(leagueId => {
-                    const leagueName = leagueIdToName[leagueId] || STATIC_LEAGUES_MAP[leagueId] || `Liga ID: ${leagueId}`;
+                    // Statyczna mapa ma priorytet (poprawne dane)
+                    const leagueName = STATIC_LEAGUES_MAP[leagueId] || leagueIdToName[leagueId] || `Liga ID: ${leagueId}`;
                         const leagueMatches = matches.filter(m => {
                         const mLeagueId = m.competition_id || m.league_id || m.leagueId || m.competitionID;
                         return mLeagueId === leagueId;
