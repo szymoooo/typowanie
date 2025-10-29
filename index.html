@@ -67,8 +67,8 @@
 
         <div class="buttons">
             <button onclick="loadTodayMatches()">SZUKAJ MECZÓW NA DZIŚ</button>
-            <button onclick="checkAvailableLeagues()">SPRAWDŹ LIGI (Sportmonks)</button>
-            <button onclick="testFootyStatsAPI()">TEST FOOTYSTATS API</button>
+            <button onclick="checkAvailableLeagues()">POBIERZ MECZE (Sportmonks)</button>
+            <button onclick="testFootyStatsAPI()">POBIERZ MECZE (FootyStats)</button>
         </div>
 
         <p id="info">Kliknij przycisk, by pobrać mecze na dziś...</p>
@@ -608,103 +608,85 @@
 
         async function checkAvailableLeagues() {
             document.getElementById('loader').style.display = 'inline-block';
-            document.getElementById('info').textContent = '🔍 Sprawdzam dostępne ligi w Sportmonks...';
+            document.getElementById('info').textContent = '🔍 Pobieranie dzisiejszych meczów z Sportmonks...';
             
             try {
-                // Pobierz listę lig dostępnych w subskrypcji (z krajem)
-                const url = `${PROXY}https://api.sportmonks.com/v3/football/leagues?api_token=${SPORTMONKS_KEY}&include=country`;
-                console.log('📡 Sprawdzam dostępne ligi:', url);
+                // Pobierz dzisiejsze mecze z Sportmonks
+                const today = new Date().toISOString().split('T')[0];
+                const url = `${PROXY}https://api.sportmonks.com/v3/football/fixtures/date/${today}?api_token=${SPORTMONKS_KEY}&include=league`;
+                console.log('📡 Sportmonks - pobieranie meczów na:', today, url);
                 
                 const res = await fetch(url);
                 const data = await res.json();
                 
-                console.log('📦 Odpowiedź o ligach:', data);
+                console.log('📦 Odpowiedź Sportmonks:', data);
                 
                 if (data.data && data.data.length > 0) {
-                    console.log(`✅ Znaleziono ${data.data.length} lig w Twoim planie`);
+                    const matches = data.data;
+                    console.log(`✅ Sportmonks: Znaleziono ${matches.length} meczów`);
                     
-                    // NIE FILTRUJEMY - pokazujemy WSZYSTKIE ligi z planu
-                    const allLeagues = data.data;
+                    // Zlicz unikalne ligi
+                    const uniqueLeagues = new Set();
+                    matches.forEach(match => {
+                        if (match.league?.name) {
+                            uniqueLeagues.add(match.league.name);
+                        }
+                    });
                     
-                    // Wyświetl ligi w tabeli
+                    // Wyświetl mecze w tabeli
                     const table = document.getElementById('predictions');
                     table.style.display = 'table';
                     
                     let html = `<tr>
-                        <th>ID</th>
-                        <th>Nazwa Ligi</th>
-                        <th>Kraj</th>
-                        <th>Typ</th>
+                        <th>Mecz</th>
+                        <th>Liga</th>
+                        <th>Godzina</th>
                     </tr>`;
                     
-                    // Sortuj po kraju, potem po nazwie
-                    const sortedLeagues = allLeagues.sort((a, b) => {
-                        const countryA = a.country?.name || 'ZZZ';
-                        const countryB = b.country?.name || 'ZZZ';
-                        if (countryA !== countryB) return countryA.localeCompare(countryB);
-                        return (a.name || '').localeCompare(b.name || '');
+                    // Sortuj po lidze, potem po godzinie
+                    const sortedMatches = matches.sort((a, b) => {
+                        const leagueA = a.league?.name || 'ZZZ';
+                        const leagueB = b.league?.name || 'ZZZ';
+                        if (leagueA !== leagueB) return leagueA.localeCompare(leagueB);
+                        return (a.starting_at || '').localeCompare(b.starting_at || '');
                     });
                     
-                    sortedLeagues.forEach(league => {
+                    sortedMatches.forEach(match => {
+                        // Parsuj nazwę meczu (Team1 vs Team2)
+                        const matchName = match.name || 'Unknown vs Unknown';
+                        const leagueName = match.league?.name || 'Unknown League';
+                        
+                        // Parsuj godzinę
+                        let time = '-';
+                        if (match.starting_at) {
+                            const date = new Date(match.starting_at);
+                            time = date.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' });
+                        }
+                        
                         html += `<tr>
-                            <td>${league.id}</td>
-                            <td><strong>${league.name}</strong></td>
-                            <td>${league.country?.name || '-'}</td>
-                            <td>${league.type || '-'}</td>
+                            <td><strong>${matchName}</strong></td>
+                            <td>${leagueName}</td>
+                            <td>${time}</td>
                         </tr>`;
                     });
                     
                     table.innerHTML = html;
                     
-                    // Sprawdź czy są ważne ligi
-                    const hasPoland = allLeagues.some(l => l.name?.includes('Ekstraklasa'));
-                    const hasFACup = allLeagues.some(l => l.name?.includes('FA Cup'));
-                    const hasCarabao = allLeagues.some(l => l.name?.includes('Carabao'));
-                    
                     document.getElementById('info').innerHTML = `
-                        ✅ Znaleziono <strong>${data.data.length} lig</strong> w Twoim planie Sportmonks<br>
-                        <small style="color:#aaa;">
-                            ${hasPoland ? '✅ Ekstraklasa' : '❌ Brak Ekstraklasy'} | 
-                            ${hasFACup ? '✅ FA Cup' : '❌ Brak FA Cup'} | 
-                            ${hasCarabao ? '✅ Carabao Cup' : '❌ Brak Carabao Cup'}
-                        </small><br>
-                        <small style="color:#888;">ℹ️ FootyStats nie ma endpointu do listowania lig, ale <strong>działa dla analizy prawdopodobieństw</strong> każdego meczu</small>
+                        ✅ <strong>SPORTMONKS</strong> - Znaleziono <strong>${matches.length} meczów</strong> z <strong>${uniqueLeagues.size} lig</strong><br>
+                        <small style="color:#aaa;">📅 Data: ${today} | Tabela przewijalna jeśli jest wiele meczów</small>
                     `;
                     
                     // Wyświetl szczegóły w konsoli
-                    console.log('📋 WSZYSTKIE DOSTĘPNE LIGI:');
-                    data.data.forEach((league, index) => {
-                        console.log(`${index + 1}. [${league.id}] ${league.name} (${league.country?.name || 'N/A'}) - ${league.is_active ? 'Aktywna' : 'Nieaktywna'}`);
+                    console.log('📋 WSZYSTKIE MECZE (Sportmonks):');
+                    uniqueLeagues.forEach(league => {
+                        const leagueMatches = matches.filter(m => m.league?.name === league);
+                        console.log(`${league}: ${leagueMatches.length} meczów`);
                     });
-                    
-                    // Pokaż info o subskrypcji
-                    console.log('📊 PEŁNA ODPOWIEDŹ (subscription, pagination, rate_limit):', {
-                        subscription: data.subscription,
-                        pagination: data.pagination,
-                        rate_limit: data.rate_limit
-                    });
-                    
-                    if (data.subscription) {
-                        const sub = Array.isArray(data.subscription) ? data.subscription[0] : data.subscription;
-                        console.log('📊 INFORMACJE O SUBSKRYPCJI:', sub);
-                        
-                        let subInfo = '';
-                        if (sub.plan) subInfo += `Plan: <strong>${sub.plan}</strong> | `;
-                        if (sub.sport) subInfo += `Sport: ${sub.sport} | `;
-                        if (sub.category) subInfo += `Kategoria: ${sub.category}`;
-                        
-                        document.getElementById('api-status').innerHTML = `
-                            ℹ️ ${subInfo || 'Brak szczegółów subskrypcji'}
-                        `;
-                    } else {
-                        document.getElementById('api-status').innerHTML = `
-                            ⚠️ Brak informacji o subskrypcji w odpowiedzi API
-                        `;
-                    }
                     
                 } else {
-                    document.getElementById('info').textContent = '❌ Brak dostępnych lig lub problem z API';
-                    console.error('Brak lig w odpowiedzi:', data);
+                    document.getElementById('info').textContent = '❌ Brak meczów lub problem z Sportmonks API';
+                    console.error('Brak meczów w odpowiedzi:', data);
                 }
                 
             } catch (e) {
@@ -717,151 +699,90 @@
 
         async function testFootyStatsAPI() {
             document.getElementById('loader').style.display = 'inline-block';
-            document.getElementById('info').textContent = '🔍 Testuję FootyStats API...';
+            document.getElementById('info').textContent = '🔍 Pobieranie dzisiejszych meczów z FootyStats...';
             
             try {
-                // Test 1: Sprawdź test endpoint z dokumentacji
-                console.log('=== TEST 1: Test endpoint z dokumentacji ===');
-                const testUrl1 = `${PROXY}https://api.football-data-api.com/test-call?key=${FOOTYSTATS_KEY}`;
-                console.log('📡 URL (football-data-api.com):', testUrl1);
+                // Pobierz dzisiejsze mecze z FootyStats
+                const today = new Date().toISOString().split('T')[0];
+                const url = `${PROXY}https://api.football-data-api.com/todays-matches?key=${FOOTYSTATS_KEY}`;
+                console.log('📡 FootyStats - pobieranie meczów na:', today, url);
                 
-                try {
-                    const res1 = await fetch(testUrl1);
-                    const data1 = await res1.text();
-                    console.log('✅ Status:', res1.status);
-                    console.log('📦 Odpowiedź:', data1);
-                } catch (e) {
-                    console.error('❌ Błąd:', e.message);
-                }
+                const res = await fetch(url);
+                const data = await res.json();
                 
-                // Test 2: Sprawdź stary URL
-                console.log('\n=== TEST 2: Stary URL (api.footystats.org) ===');
-                const testUrl2 = `${PROXY}https://api.footystats.org/leagues?key=${FOOTYSTATS_KEY}`;
-                console.log('📡 URL:', testUrl2);
+                console.log('📦 Odpowiedź FootyStats:', data);
                 
-                try {
-                    const res2 = await fetch(testUrl2);
-                    const data2 = await res2.json();
-                    console.log('✅ Status:', res2.status);
-                    console.log('📦 Odpowiedź:', data2);
-                } catch (e) {
-                    console.error('❌ Błąd:', e.message);
-                }
-                
-                // Test 3: Sprawdź czy są dostępne ligi w API
-                console.log('\n=== TEST 3: Pobieranie lig (football-data-api.com) ===');
-                const testUrl3 = `${PROXY}https://api.football-data-api.com/league-list?key=${FOOTYSTATS_KEY}`;
-                console.log('📡 URL:', testUrl3);
-                
-                try {
-                    const res3 = await fetch(testUrl3);
-                    const data3 = await res3.json();
-                    console.log('✅ Status:', res3.status);
-                    console.log('📦 Odpowiedź:', data3);
+                if (data.data && Array.isArray(data.data) && data.data.length > 0) {
+                    const matches = data.data;
+                    console.log(`✅ FootyStats: Znaleziono ${matches.length} meczów`);
                     
-                    if (data3.data && Array.isArray(data3.data)) {
-                        console.log(`⚠️ UWAGA: Endpoint zwrócił ${data3.data.length} lig - to WSZYSTKIE ligi w bazie, nie tylko Twoje 50!`);
+                    // Zlicz unikalne ligi
+                    const uniqueLeagues = new Set();
+                    matches.forEach(match => {
+                        const leagueName = match.competition_name || match.league || 'Unknown';
+                        uniqueLeagues.add(leagueName);
+                    });
+                    
+                    // Wyświetl mecze w tabeli
+                    const table = document.getElementById('predictions');
+                    table.style.display = 'table';
+                    
+                    let html = `<tr>
+                        <th>Mecz</th>
+                        <th>Liga</th>
+                        <th>Godzina</th>
+                    </tr>`;
+                    
+                    // Sortuj po lidze, potem po godzinie
+                    const sortedMatches = matches.sort((a, b) => {
+                        const leagueA = a.competition_name || a.league || 'ZZZ';
+                        const leagueB = b.competition_name || b.league || 'ZZZ';
+                        if (leagueA !== leagueB) return leagueA.localeCompare(leagueB);
+                        return (a.date_unix || 0) - (b.date_unix || 0);
+                    });
+                    
+                    sortedMatches.forEach(match => {
+                        // Parsuj nazwę meczu
+                        const homeName = match.home_name || match.homeTeam || 'Unknown';
+                        const awayName = match.away_name || match.awayTeam || 'Unknown';
+                        const matchName = `${homeName} vs ${awayName}`;
+                        const leagueName = match.competition_name || match.league || 'Unknown League';
                         
-                        // DEBUG: Sprawdź strukturę kilku lig
-                        if (data3.data.length > 0) {
-                            console.log('📊 STRUKTURA PIERWSZYCH 5 LIG:');
-                            for (let i = 0; i < Math.min(5, data3.data.length); i++) {
-                                console.log(`   ${i+1}. Liga:`, data3.data[i]);
-                            }
-                            console.log('📊 Wszystkie dostępne klucze:', Object.keys(data3.data[0]));
-                            
-                            // Sprawdź czy jest pole wskazujące na subskrypcję
-                            const firstLeague = data3.data[0];
-                            const possibleFields = ['subscribed', 'accessible', 'in_plan', 'enabled', 'available', 'user_has_access', 'subscription_level'];
-                            console.log('🔍 Szukam pól wskazujących na dostępność w planie użytkownika:');
-                            possibleFields.forEach(field => {
-                                if (field in firstLeague) {
-                                    console.log(`   ✅ Znaleziono pole: ${field} = ${firstLeague[field]}`);
-                                } else {
-                                    console.log(`   ❌ Brak pola: ${field}`);
-                                }
-                            });
+                        // Parsuj godzinę
+                        let time = '-';
+                        if (match.date_unix) {
+                            const date = new Date(match.date_unix * 1000);
+                            time = date.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' });
+                        } else if (match.date) {
+                            const date = new Date(match.date);
+                            time = date.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' });
                         }
                         
-                        // Sprawdź metadata/subscription info
-                        if (data3.metadata) {
-                            console.log('📊 METADATA:', data3.metadata);
-                        }
-                        if (data3.subscription) {
-                            console.log('📊 SUBSCRIPTION INFO:', data3.subscription);
-                        }
-                        if (data3.user) {
-                            console.log('📊 USER INFO:', data3.user);
-                        }
-                        
-                        // Wyświetl w tabeli
-                        const table = document.getElementById('predictions');
-                        table.style.display = 'table';
-                        
-                        // Bez kolumny ID i Sezon (nie istnieją w tej strukturze)
-                        let html = `<tr>
-                            <th>Nazwa Ligi</th>
-                            <th>Kraj</th>
+                        html += `<tr>
+                            <td><strong>${matchName}</strong></td>
+                            <td>${leagueName}</td>
+                            <td>${time}</td>
                         </tr>`;
-                        
-                        data3.data.forEach(league => {
-                            // Różne możliwe nazwy pól
-                            const leagueName = league.name || league.competition || league.league_name || 'Unknown';
-                            const countryName = league.country || league.country_name || league.nation || '-';
-                            
-                            html += `<tr>
-                                <td><strong>${leagueName}</strong></td>
-                                <td>${countryName}</td>
-                            </tr>`;
-                        });
-                        
-                        table.innerHTML = html;
-                        
-                        document.getElementById('info').innerHTML = `
-                            ⚠️ <strong>FootyStats API działa, ale...</strong><br>
-                            Endpoint <code>/league-list</code> zwraca <strong>${data3.data.length} lig</strong> - to WSZYSTKIE ligi w bazie!<br>
-                            <small style="color:#faa;">Twój plan ma tylko 50 lig - potrzebujemy znaleźć endpoint który zwraca TYLKO Twoje ligi</small><br>
-                            <small style="color:#aaa;">📊 Sprawdź konsolę (F12) - szukam pola które filtruje ligi w planie</small>
-                        `;
-                    }
-                } catch (e) {
-                    console.error('❌ Błąd:', e.message);
+                    });
+                    
+                    table.innerHTML = html;
+                    
+                    document.getElementById('info').innerHTML = `
+                        ✅ <strong>FOOTYSTATS</strong> - Znaleziono <strong>${matches.length} meczów</strong> z <strong>${uniqueLeagues.size} lig</strong><br>
+                        <small style="color:#aaa;">📅 Data: ${today} | Tabela przewijalna jeśli jest wiele meczów</small>
+                    `;
+                    
+                    // Wyświetl szczegóły w konsoli
+                    console.log('📋 WSZYSTKIE MECZE (FootyStats):');
+                    uniqueLeagues.forEach(league => {
+                        const leagueMatches = matches.filter(m => (m.competition_name || m.league) === league);
+                        console.log(`${league}: ${leagueMatches.length} meczów`);
+                    });
+                    
+                } else {
+                    document.getElementById('info').textContent = '❌ Brak meczów lub problem z FootyStats API';
+                    console.error('Brak meczów w odpowiedzi:', data);
                 }
-                
-                // Test 4: Inne możliwe endpointy - szukamy endpoint z TYLKO Twoimi 50 ligami
-                console.log('\n=== TEST 4: Szukam endpointu dla Twoich 50 lig ===');
-                const endpoints = [
-                    'https://api.football-data-api.com/leagues',
-                    'https://api.football-data-api.com/my-leagues',
-                    'https://api.football-data-api.com/user-leagues',
-                    'https://api.football-data-api.com/subscribed-leagues',
-                    'https://api.football-data-api.com/account-leagues',
-                    'https://api.football-data-api.com/subscription',
-                    'https://api.football-data-api.com/account',
-                    'https://api.football-data-api.com/league-seasons'
-                ];
-                
-                for (const endpoint of endpoints) {
-                    const url = `${PROXY}${endpoint}?key=${FOOTYSTATS_KEY}`;
-                    console.log(`📡 Testuję: ${endpoint}`);
-                    try {
-                        const res = await fetch(url);
-                        const data = await res.json();
-                        if (res.status === 200 && data.data) {
-                            console.log(`   ✅ Status ${res.status}: Znaleziono ${Array.isArray(data.data) ? data.data.length : '?'} elementów`);
-                            console.log(`   📦 Dane:`, data);
-                        } else {
-                            console.log(`   ⚠️ Status ${res.status}:`, data.message || 'Brak danych');
-                        }
-                    } catch (e) {
-                        console.log(`   ❌ Błąd: ${e.message}`);
-                    }
-                }
-                
-                document.getElementById('info').innerHTML = `
-                    ℹ️ Test zakończony - sprawdź konsolę (F12) dla szczegółów<br>
-                    <small style="color:#aaa;">Szukam poprawnego endpointu dla Twoich 50 wybranych lig</small>
-                `;
                 
             } catch (e) {
                 console.error('💥 BŁĄD podczas testowania FootyStats:', e);
