@@ -1119,13 +1119,16 @@
                     }
                     
                 // ✅ FILTRUJ MECZE: zaplanowane na dziś + zakończone + LIVE
-                const todayStart = new Date(today + 'T00:00:00').getTime() / 1000; // Unix timestamp początku dnia
-                const todayEnd = new Date(today + 'T23:59:59').getTime() / 1000; // Unix timestamp końca dnia
+                // WAŻNE: date_unix z API jest w UTC, więc musimy użyć UTC do obliczania przedziałów
+                const todayUTC = new Date(today + 'T00:00:00Z'); // UTC - dodajemy 'Z' na końcu
+                const todayStart = Math.floor(todayUTC.getTime() / 1000); // Unix timestamp początku dnia UTC
+                const todayEnd = Math.floor(todayUTC.getTime() / 1000) + 86399; // +23:59:59 = 86399 sekund
                 const now = Math.floor(Date.now() / 1000);
                 const yesterdayStart = now - 86400; // 24 godziny temu (żeby pokazać zakończone mecze z wczoraj które się zakończyły dziś)
                 
                 console.log(`📅 Filtrowanie meczów: pokazuję zaplanowane na dziś, trwające LIVE i zakończone z ostatnich 24h`);
-                console.log(`   Przedział czasowy dla zaplanowanych: ${todayStart} - ${todayEnd} (Unix)`);
+                console.log(`   Przedział czasowy dla zaplanowanych: ${todayStart} - ${todayEnd} (Unix UTC)`);
+                console.log(`   Przedział UTC: ${new Date(todayStart * 1000).toISOString()} - ${new Date(todayEnd * 1000).toISOString()}`);
                 console.log(`   Przedział lokalny: ${new Date(todayStart * 1000).toLocaleString('pl-PL')} - ${new Date(todayEnd * 1000).toLocaleString('pl-PL')}`);
                 
                 const matches = allMatches.filter(match => {
