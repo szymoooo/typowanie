@@ -832,6 +832,7 @@
                     console.log('🔍 Przykładowa liga (pierwsza):', leaguesArray[0]);
                     console.log('🔍 Klucze pierwszej ligi:', Object.keys(leaguesArray[0]));
                     
+                    let skippedCount = 0;
                     leaguesArray.forEach((league, index) => {
                         // Spróbuj różne możliwe pola dla ID
                         const leagueId = league.id || league.league_id || league.competition_id;
@@ -842,9 +843,16 @@
                     if (leagueId) {
                         footyStatsLeagues[leagueId] = fullName;
                     } else {
-                        console.warn(`⚠️ Liga bez ID (index ${index}):`, league);
+                        skippedCount++;
+                        // Loguj tylko pierwsze 3 przykłady, żeby nie spamować konsoli
+                        if (skippedCount <= 3) {
+                            console.warn(`⚠️ Liga bez ID (index ${index}):`, league);
+                        }
                     }
                 });
+                    if (skippedCount > 3) {
+                        console.warn(`⚠️ ... i ${skippedCount - 3} więcej lig bez ID (pominięto)`);
+                    }
                     console.log(`✅ Załadowano ${Object.keys(footyStatsLeagues).length} lig z /league-list`);
             } else {
                     console.error('❌ Nie można znaleźć tablicy lig w odpowiedzi:', data1);
@@ -1097,26 +1105,52 @@
                         console.log('⚽ awayGoalCount:', allMatches[0].awayGoalCount);
                     }
                     
-                // ✅ FILTRUJ PO DATIE - tylko mecze z dzisiejszego dnia (00:00-23:59)
+                // ✅ FILTRUJ MECZE: zaplanowane na dziś + zakończone + LIVE
                 const todayStart = new Date(today + 'T00:00:00').getTime() / 1000; // Unix timestamp początku dnia
                 const todayEnd = new Date(today + 'T23:59:59').getTime() / 1000; // Unix timestamp końca dnia
+                const now = Math.floor(Date.now() / 1000);
+                const yesterdayStart = now - 86400; // 24 godziny temu (żeby pokazać zakończone mecze z wczoraj które się zakończyły dziś)
                 
-                console.log(`📅 Filtrowanie meczów: tylko z dnia ${today}`);
-                console.log(`   Przedział czasowy: ${todayStart} - ${todayEnd} (Unix)`);
+                console.log(`📅 Filtrowanie meczów: zaplanowane na dziś + zakończone + LIVE`);
+                console.log(`   Przedział czasowy dla zaplanowanych: ${todayStart} - ${todayEnd} (Unix)`);
                 console.log(`   Przedział lokalny: ${new Date(todayStart * 1000).toLocaleString('pl-PL')} - ${new Date(todayEnd * 1000).toLocaleString('pl-PL')}`);
                 
                 const matches = allMatches.filter(match => {
                     const matchDateUnix = match.date_unix || match.date_unix_timestamp || 0;
-                    if (!matchDateUnix) {
-                        console.warn(`⚠️ Mecz bez date_unix:`, match);
-                        return false;
-                    }
-                    const isToday = matchDateUnix >= todayStart && matchDateUnix <= todayEnd;
-                    if (!isToday) {
+                    const status = match.status || match.match_status || '';
+                    
+                    // Sprawdź czy mecz jest zakończony
+                    const isFinished = status === 'complete' || 
+                                     status === 'finished' || 
+                                     status === 'FT' ||
+                                     (match.finished === true) ||
+                                     (match.homeGoalCount !== undefined && match.awayGoalCount !== undefined && match.date_unix && match.date_unix < now - 3600); // Mecz zakończony jeśli ma bramki i minęła godzina od startu
+                    
+                    // Sprawdź czy mecz jest LIVE
+                    const matchStarted = matchDateUnix && (now > matchDateUnix + 300); // 5 min po starcie
+                    const isLive = status === 'live' || 
+                                  status === 'inplay' || 
+                                  status === 'LIVE' ||
+                                  (status === 'incomplete' && matchStarted && !isFinished);
+                    
+                    // Sprawdź czy mecz jest zaplanowany na dziś
+                    const isScheduledToday = matchDateUnix >= todayStart && matchDateUnix <= todayEnd;
+                    
+                    // Sprawdź czy mecz jest zakończony ale niedawny (z ostatnich 24h)
+                    const isRecentFinished = isFinished && matchDateUnix >= yesterdayStart;
+                    
+                    // Pokaż mecz jeśli:
+                    // 1. Jest zaplanowany na dziś
+                    // 2. Jest LIVE (niezależnie od daty)
+                    // 3. Jest zakończony i niedawny (z ostatnich 24h)
+                    const shouldShow = isScheduledToday || isLive || isRecentFinished;
+                    
+                    if (!shouldShow && matchDateUnix) {
                         const matchDate = new Date(matchDateUnix * 1000);
-                        console.log(`   ❌ Pomijam mecz z ${matchDate.toLocaleString('pl-PL')}`);
+                        console.log(`   ❌ Pomijam mecz z ${matchDate.toLocaleString('pl-PL')} (status: ${status})`);
                     }
-                    return isToday;
+                    
+                    return shouldShow;
                 });
                 
                 console.log(`✅ FootyStats: Po filtrowaniu zostało ${matches.length} meczów z dnia ${today} (z ${allMatches.length} pobranych)`);
@@ -1225,26 +1259,40 @@
                         
                         // Sprawdź status meczu (zakończony, trwający, zaplanowany)
                         const status = match.status || match.match_status || '';
+                        const now = Math.floor(Date.now() / 1000);
+                        const matchStarted = match.date_unix && (now > match.date_unix + 300); // 5 min po starcie
+                        
+                        // Sprawdź czy mecz jest zakończony (więcej opcji niż wcześniej)
                         const isFinished = status === 'complete' || 
                                           status === 'finished' || 
-                                          status === 'FT';
+                                          status === 'FT' ||
+                                          (match.finished === true) ||
+                                          (match.homeGoalCount !== undefined && match.awayGoalCount !== undefined && match.date_unix && match.date_unix < now - 3600); // Mecz zakończony jeśli ma bramki i minęła godzina od startu
                         
                         // Mecz LIVE jeśli:
                         // 1. Status jawnie to mówi
-                        // 2. Status 'incomplete' + mecz już się rozpoczął (date_unix < teraz) + jest min. 5 min po starcie
-                        const now = Math.floor(Date.now() / 1000);
-                        const matchStarted = match.date_unix && (now > match.date_unix + 300); // 5 min po starcie
+                        // 2. Status 'incomplete' + mecz już się rozpoczął (date_unix < teraz) + jest min. 5 min po starcie + NIE jest zakończony
                         const isLive = status === 'live' || 
                                       status === 'inplay' || 
                                       status === 'LIVE' ||
-                                      (status === 'incomplete' && matchStarted);
+                                      (status === 'incomplete' && matchStarted && !isFinished);
                         
                         // Parsuj godzinę lub status
                         let time = '-';
                         if (isFinished) {
-                            time = '✅ KONIEC';
+                            // Pokaż wynik jeśli są bramki
+                            if (match.homeGoalCount !== undefined && match.awayGoalCount !== undefined) {
+                                time = `✅ KONIEC (${match.homeGoalCount}:${match.awayGoalCount})`;
+                            } else {
+                                time = '✅ KONIEC';
+                            }
                         } else if (isLive) {
-                            time = '🔴 LIVE';
+                            // Pokaż wynik jeśli są bramki
+                            if (match.homeGoalCount !== undefined && match.awayGoalCount !== undefined) {
+                                time = `🔴 LIVE (${match.homeGoalCount}:${match.awayGoalCount})`;
+                            } else {
+                                time = '🔴 LIVE';
+                            }
                         } else {
                             if (match.date_unix) {
                                 const date = new Date(match.date_unix * 1000);
