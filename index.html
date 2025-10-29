@@ -1215,7 +1215,18 @@
                 });
             }
             table.innerHTML = html;
-            document.getElementById('info').innerHTML = `Znaleziono <strong>${predictions.length}</strong> typów!<br><small style="color:#afa;">✅ Aktywne: Sportmonks + FootyStats (analiza ostatnich 10 meczów każdy - prawdziwe dane!)</small><br><small style="color:#faa;">❌ Wyłączone: API-Football (limit), Web scraping (niestabilny)</small><br><small style="color:#aaf;">⚠️ TEST MODE - nie wdrożone na GitHub</small>`;
+            
+            // Poprawna odmiana słowa "typ"
+            let typText;
+            if (predictions.length === 1) {
+                typText = 'typ';
+            } else if (predictions.length >= 2 && predictions.length <= 4) {
+                typText = 'typy';
+            } else {
+                typText = 'typów';
+            }
+            
+            document.getElementById('info').innerHTML = `Znaleziono <strong>${predictions.length}</strong> ${typText}!<br><small style="color:#afa;">✅ Aktywne: Sportmonks + FootyStats (analiza ostatnich 10 meczów każdy - prawdziwe dane!)</small>`;
             updateStats();
         }
 
