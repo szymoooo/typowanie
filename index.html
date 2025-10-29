@@ -764,23 +764,30 @@
                     if (data3.data && Array.isArray(data3.data)) {
                         console.log(`✅ Znaleziono ${data3.data.length} lig w Twoim planie!`);
                         
+                        // DEBUG: Sprawdź strukturę pierwszej ligi
+                        if (data3.data.length > 0) {
+                            console.log('📊 STRUKTURA PIERWSZEJ LIGI:', data3.data[0]);
+                            console.log('📊 Wszystkie klucze:', Object.keys(data3.data[0]));
+                        }
+                        
                         // Wyświetl w tabeli
                         const table = document.getElementById('predictions');
                         table.style.display = 'table';
                         
+                        // Bez kolumny ID i Sezon (nie istnieją w tej strukturze)
                         let html = `<tr>
-                            <th>ID</th>
                             <th>Nazwa Ligi</th>
                             <th>Kraj</th>
-                            <th>Sezon</th>
                         </tr>`;
                         
                         data3.data.forEach(league => {
+                            // Różne możliwe nazwy pól
+                            const leagueName = league.name || league.competition || league.league_name || 'Unknown';
+                            const countryName = league.country || league.country_name || league.nation || '-';
+                            
                             html += `<tr>
-                                <td>${league.id || league.league_id || '-'}</td>
-                                <td><strong>${league.name || league.competition || 'Unknown'}</strong></td>
-                                <td>${league.country || league.country_name || '-'}</td>
-                                <td>${league.season || league.year || '-'}</td>
+                                <td><strong>${leagueName}</strong></td>
+                                <td>${countryName}</td>
                             </tr>`;
                         });
                         
@@ -1088,7 +1095,8 @@
         async function getFootyStatsTeamMatches(teamSlug, limit = 10) {
             try {
                 // PROXY jest KONIECZNY dla FootyStats (CORS)!
-                const url = `${PROXY}https://api.footystats.org/team-matches?key=${FOOTYSTATS_KEY}&team=${teamSlug}`;
+                // POPRAWNY URL: api.football-data-api.com (NIE api.footystats.org)
+                const url = `${PROXY}https://api.football-data-api.com/team-matches?key=${FOOTYSTATS_KEY}&team=${teamSlug}`;
                 console.log(`    📡 FootyStats URL: ${url}`);
                 
                 const res = await fetch(url);
