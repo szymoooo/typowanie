@@ -107,8 +107,28 @@
         ];
         let currentKeyIndex = 0;
 
-        // === PROXY (DZIAŁA Z HEADERAMI!) ===
-        const PROXY = 'https://corsproxy.io/?';
+        // === PROXY (ALTERNATYWNE PROXY) ===
+        // corsproxy.io jest czasami blokowany przez Cloudflare (403)
+        // Używamy listy alternatywnych proxy
+        const PROXY_SERVICES = [
+            'https://corsproxy.io/?',
+            'https://api.allorigins.win/raw?url=',
+            'https://cors-anywhere.herokuapp.com/',
+            'https://api.codetabs.com/v1/proxy?quest='
+        ];
+        let currentProxyIndex = 0;
+        
+        function getProxy() {
+            return PROXY_SERVICES[currentProxyIndex];
+        }
+        
+        function switchProxy() {
+            currentProxyIndex = (currentProxyIndex + 1) % PROXY_SERVICES.length;
+            console.log(`🔄 Zmieniono proxy na: ${PROXY_SERVICES[currentProxyIndex]}`);
+        }
+        
+        // Backward compatibility
+        const PROXY = getProxy();
 
         let predictions = [];
         let hits = 0, total = 0;
@@ -2598,18 +2618,42 @@
             
             footyStatsLeagues = {};
             
-            // KROK 1: Pobierz z league-list
-            try {
-                const res1 = await fetch(url1);
+            // KROK 1: Pobierz z league-list z automatycznym przełączaniem proxy
+            let res1;
+            let attempts = 0;
+            const maxAttempts = PROXY_SERVICES.length;
+            
+            while (attempts < maxAttempts) {
+                const proxy = getProxy();
+                const url1 = `${proxy}https://api.football-data-api.com/league-list?key=${FOOTYSTATS_KEY}`;
+                console.log(`📡 Pobieranie listy lig z FootyStats... (proxy: ${proxy}, próba ${attempts + 1}/${maxAttempts})`);
                 
-                // Sprawdź status i contentType przed parsowaniem
-                if (!res1.ok) {
-                    console.warn(`⚠️ /league-list zwróciło status ${res1.status}`);
-                    if (res1.status === 403) {
-                        console.error('⛔ CORS Proxy zablokowany przez Cloudflare (403)');
+                res1 = await fetch(url1);
+                
+                if (res1.ok) {
+                    console.log(`✅ Proxy ${proxy} działa!`);
+                    break;
+                } else if (res1.status === 403) {
+                    console.warn(`⚠️ Proxy ${proxy} zablokowany (403) - próbuję następnego...`);
+                    switchProxy();
+                    attempts++;
+                    if (attempts < maxAttempts) {
+                        await new Promise(resolve => setTimeout(resolve, 1000));
+                        continue;
                     }
-                    throw new Error(`HTTP ${res1.status}`);
+                } else {
+                    break;
                 }
+            }
+            
+            if (attempts >= maxAttempts || !res1.ok) {
+                console.warn(`⚠️ Nie można pobrać z /league-list: HTTP ${res1.status}`);
+                console.warn('   Używam tylko STATIC_LEAGUES_MAP (1727 lig)');
+                footyStatsLeagues = {};
+                return {};
+            }
+            
+            try {
                 
                 const contentType = res1.headers.get('content-type');
                 if (!contentType || !contentType.includes('application/json')) {
@@ -2794,18 +2838,41 @@
                 const today = new Date().toISOString().split('T')[0];
                 
                 // Użyj endpoint /todays-matches (endpoint /matches?date= nie istnieje w API)
-                const url = `${PROXY}https://api.football-data-api.com/todays-matches?key=${FOOTYSTATS_KEY}`;
+                // Automatyczne przełączanie proxy w przypadku 403
+                let res;
+                let attempts = 0;
+                const maxAttempts = PROXY_SERVICES.length;
+                
+                while (attempts < maxAttempts) {
+                    const proxy = getProxy();
+                    const url = `${proxy}https://api.football-data-api.com/todays-matches?key=${FOOTYSTATS_KEY}`;
                 
                 console.log('📡 FootyStats - pobieranie meczów na:', today);
-                console.log('   Endpoint:', url);
+                    console.log(`   Endpoint: ${url}`);
+                    console.log(`   Proxy: ${proxy} (próba ${attempts + 1}/${maxAttempts})`);
+                    
+                    res = await fetch(url);
+                    
+                    if (res.ok) {
+                        console.log(`✅ Proxy ${proxy} działa!`);
+                        break;
+                    } else if (res.status === 403) {
+                        console.warn(`⚠️ Proxy ${proxy} zablokowany (403) - próbuję następnego...`);
+                        switchProxy();
+                        attempts++;
+                        if (attempts < maxAttempts) {
+                            await new Promise(resolve => setTimeout(resolve, 1000));
+                            continue;
+                        }
+                    } else {
+                        // Inny błąd - nie próbuj dalej
+                        break;
+                    }
+                }
                 
-                // Pobierz mecze z /todays-matches
-                const res = await fetch(url);
-                
-                // Sprawdź status i contentType przed parsowaniem
-                if (!res.ok) {
-                    console.error(`❌ FootyStats zwrócił status ${res.status}`);
-                    throw new Error(`Nie można pobrać meczów z FootyStats (HTTP ${res.status})`);
+                if (attempts >= maxAttempts || !res.ok) {
+                    console.error(`❌ FootyStats zwrócił status ${res.status} po ${maxAttempts} próbach`);
+                    throw new Error(`Nie można pobrać meczów z FootyStats (HTTP ${res.status}). Wszystkie proxy zwróciły 403. Spróbuj za chwilę lub użyj VPN.`);
                 }
                 
                 const contentType = res.headers.get('content-type');
@@ -2929,8 +2996,8 @@
                 
                 console.log(`✅ FootyStats: Po filtrowaniu zostało ${matches.length} meczów (z ${allMatches.length} pobranych)`);
                 console.log(`   📅 Mecze z dziś + LIVE + zakończone z ostatnich 24h`);
-                console.log(`🌍 Data lokalna użytkownika: ${new Date().toLocaleString('pl-PL')}`);
-                
+                    console.log(`🌍 Data lokalna użytkownika: ${new Date().toLocaleString('pl-PL')}`);
+                    
                 // ✅ TEST: Sprawdź dostępne endpointy dla pierwszego meczu
                 if (matches.length > 0) {
                     const firstMatchId = matches[0].id || matches[0].match_id;
@@ -4046,42 +4113,67 @@
             const results = [];
             
             for (const endpoint of endpoints) {
-                try {
-                    const url = `${PROXY}https://api.football-data-api.com${endpoint}?key=${FOOTYSTATS_KEY}`;
-                    console.log(`    📡 Testuję: ${endpoint}`);
-                    
-                    const res = await fetch(url);
-                    const contentType = res.headers.get('content-type') || '';
-                    
-                    if (res.ok && contentType.includes('application/json')) {
-                        const data = await res.json();
-                        console.log(`    ✅ ${endpoint} - Status: ${res.status} | Zawiera dane:`, Object.keys(data).length > 0);
-                        results.push({
-                            endpoint: endpoint,
-                            status: res.status,
-                            success: true,
-                            dataKeys: Object.keys(data),
-                            sampleData: JSON.stringify(data).substring(0, 200)
-                        });
-                    } else {
-                        console.log(`    ❌ ${endpoint} - Status: ${res.status} | Content-Type: ${contentType}`);
-                        results.push({
-                            endpoint: endpoint,
-                            status: res.status,
-                            success: false
-                        });
+                let attempts = 0;
+                const maxAttempts = PROXY_SERVICES.length;
+                
+                while (attempts < maxAttempts) {
+                    try {
+                        const proxy = getProxy();
+                        const url = `${proxy}https://api.football-data-api.com${endpoint}?key=${FOOTYSTATS_KEY}`;
+                        console.log(`    📡 Testuję: ${endpoint} (proxy: ${proxy}, próba ${attempts + 1}/${maxAttempts})`);
+                        
+                        let res = await fetch(url);
+                        const contentType = res.headers.get('content-type') || '';
+                        
+                        // Jeśli 403, spróbuj następnego proxy
+                        if (res.status === 403 && attempts < maxAttempts - 1) {
+                            console.log(`    ⚠️ ${endpoint} - Proxy zablokowany (403), próbuję następnego...`);
+                            switchProxy();
+                            attempts++;
+                            await delay(500);
+                            continue;
+                        }
+                        
+                        if (res.ok && contentType.includes('application/json')) {
+                            const data = await res.json();
+                            console.log(`    ✅ ${endpoint} - Status: ${res.status} | Zawiera dane:`, Object.keys(data).length > 0);
+                            results.push({
+                                endpoint: endpoint,
+                                status: res.status,
+                                success: true,
+                                dataKeys: Object.keys(data),
+                                sampleData: JSON.stringify(data).substring(0, 200)
+                            });
+                            break; // Sukces - przejdź do następnego endpointu
+                        } else {
+                            console.log(`    ❌ ${endpoint} - Status: ${res.status} | Content-Type: ${contentType}`);
+                            results.push({
+                                endpoint: endpoint,
+                                status: res.status,
+                                success: false
+                            });
+                            break; // Przejdź do następnego endpointu
+                        }
+                    } catch (e) {
+                        console.log(`    ❌ ${endpoint} - Błąd:`, e.message);
+                        if (attempts < maxAttempts - 1) {
+                            switchProxy();
+                            attempts++;
+                            await delay(500);
+                            continue;
+                        } else {
+                            results.push({
+                                endpoint: endpoint,
+                                status: 'ERROR',
+                                error: e.message
+                            });
+                            break;
+                        }
                     }
-                } catch (e) {
-                    console.log(`    ❌ ${endpoint} - Błąd:`, e.message);
-                    results.push({
-                        endpoint: endpoint,
-                        status: 'ERROR',
-                        error: e.message
-                    });
                 }
                 
                 // Małe opóźnienie między zapytaniami
-                await delay(200);
+                await new Promise(resolve => setTimeout(resolve, 200));
             }
             
             console.log(`📊 PODSUMOWANIE TESTÓW ENDPOINTÓW:`);
@@ -4116,13 +4208,21 @@
                 
                 for (const endpoint of endpoints) {
                     try {
-                        const url = `${PROXY}https://api.football-data-api.com${endpoint}?key=${FOOTYSTATS_KEY}`;
-                        console.log(`    📡 FootyStats - Próbuję endpoint: ${endpoint}`);
+                        const proxy = getProxy();
+                        const url = `${proxy}https://api.football-data-api.com${endpoint}?key=${FOOTYSTATS_KEY}`;
+                        console.log(`    📡 FootyStats - Próbuję endpoint: ${endpoint} (proxy: ${proxy})`);
                         const res = await fetch(url);
                         
                         if (!res.ok) {
-                            console.log(`    ⚠️ ${endpoint} - Status: ${res.status}`);
-                            continue;
+                            if (res.status === 403) {
+                                console.log(`    ⚠️ ${endpoint} - Proxy zablokowany (403), próbuję następnego...`);
+                        switchProxy();
+                        await new Promise(resolve => setTimeout(resolve, 500));
+                        continue; // Spróbuj z następnym proxy
+                            } else {
+                                console.log(`    ⚠️ ${endpoint} - Status: ${res.status}`);
+                                continue;
+                            }
                         }
                         
                         const contentType = res.headers.get('content-type');
