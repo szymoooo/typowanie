@@ -70,9 +70,9 @@
             <tr>
                 <th>Mecz</th>
                 <th>Liga</th>
-                    <th>Godzina</th>
+                <th>Godzina</th>
                 <th>Status</th>
-                    <th>Prawdopodobieństwo</th>
+                <th>Historia (ostatnie 5)</th>
             </tr>
             </thead>
             <tbody id="matches-body">
@@ -165,9 +165,13 @@
                 matches = data.response;
                 console.log(`✅ Pobrano ${matches.length} meczów`);
                 
+                // Pobierz historię dla każdego meczu
+                info.innerHTML = `✅ Pobrano <strong>${matches.length} meczów</strong>. Pobieranie historii drużyn...`;
+                await analyzeAllMatches(matches);
+                
                 displayMatches(matches);
                 
-                info.innerHTML = `✅ Pobrano <strong>${matches.length} meczów</strong> na dziś (${today})`;
+                info.innerHTML = `✅ Pobrano <strong>${matches.length} meczów</strong> z historią drużyn (${today})`;
                 
             } catch (error) {
                 console.error('❌ Błąd:', error);
@@ -176,6 +180,218 @@
             } finally {
                 loader.style.display = 'none';
                 btn.disabled = false;
+            }
+        }
+
+        // === ETAP 4: Pobieranie historii drużyn ===
+        
+        // Pobierz ostatnie 5 meczów drużyny
+        async function getTeamLastMatches(teamId, limit = 5) {
+            try {
+                const url = `${API_FOOTBALL_BASE_URL}/fixtures?team=${teamId}&last=${limit}`;
+                
+                const response = await fetch(url, {
+                    headers: {
+                        'x-apisports-key': API_FOOTBALL_KEY
+                    }
+                });
+                
+                if (!response.ok) {
+                    if (response.status === 429) {
+                        throw new Error('LIMIT_ZAPYTAN');
+                    }
+                    console.warn(`⚠️ Błąd pobierania historii drużyny ${teamId}: HTTP ${response.status}`);
+                    return [];
+                }
+                
+                const data = await response.json();
+                if (!data.response || !Array.isArray(data.response)) {
+                    return [];
+                }
+                
+                return data.response;
+            } catch (error) {
+                if (error.message === 'LIMIT_ZAPYTAN') {
+                    throw error;
+                }
+                console.error(`❌ Błąd pobierania historii drużyny ${teamId}:`, error);
+                return [];
+            }
+        }
+        
+        // Pobierz statystyki meczu (rożne)
+        async function getMatchStatistics(fixtureId) {
+            try {
+                const url = `${API_FOOTBALL_BASE_URL}/fixtures/statistics?fixture=${fixtureId}`;
+                
+                const response = await fetch(url, {
+                    headers: {
+                        'x-apisports-key': API_FOOTBALL_KEY
+                    }
+                });
+                
+                if (!response.ok) {
+                    if (response.status === 429) {
+                        throw new Error('LIMIT_ZAPYTAN');
+                    }
+                    console.warn(`⚠️ Błąd pobierania statystyk meczu ${fixtureId}: HTTP ${response.status}`);
+                    return null;
+                }
+                
+                const data = await response.json();
+                if (!data.response || !Array.isArray(data.response) || data.response.length < 2) {
+                    return null;
+                }
+                
+                // response[0] = drużyna domowa, response[1] = drużyna wyjazdowa
+                const homeStats = data.response[0].statistics || [];
+                const awayStats = data.response[1].statistics || [];
+                
+                // Znajdź rożne
+                const getStatValue = (stats, statType) => {
+                    const stat = stats.find(s => s.type === statType);
+                    return stat ? parseInt(stat.value || 0) : 0;
+                };
+                
+                const homeCorners = getStatValue(homeStats, 'Corner Kicks');
+                const awayCorners = getStatValue(awayStats, 'Corner Kicks');
+                const totalCorners = homeCorners + awayCorners;
+                    
+                    return {
+                    homeCorners,
+                    awayCorners,
+                    totalCorners
+                };
+            } catch (error) {
+                if (error.message === 'LIMIT_ZAPYTAN') {
+                    throw error;
+                }
+                console.error(`❌ Błąd pobierania statystyk meczu ${fixtureId}:`, error);
+                return null;
+            }
+        }
+        
+        // Pobierz historię dla drużyny (ostatnie 5 meczów z rożnymi)
+        async function getTeamHistory(teamId, teamName, isHome) {
+            try {
+                const lastMatches = await getTeamLastMatches(teamId, 5);
+                
+                if (lastMatches.length === 0) {
+                    return {
+                        matches: [],
+                        cornersOwn: [],
+                        cornersTotal: [],
+                        avgCornersOwn: '-',
+                        avgCornersTotal: '-'
+                    };
+                }
+                
+                // Pobierz statystyki dla każdego meczu
+                const history = [];
+                const cornersOwn = [];
+                const cornersTotal = [];
+                
+                for (const match of lastMatches) {
+                    const fixtureId = match.fixture?.id;
+                    if (!fixtureId) continue;
+                    
+                    // Sprawdź czy mecz się zakończył
+                    const status = match.fixture?.status?.short;
+                    if (status !== 'FT') continue; // Tylko zakończone mecze
+                    
+                    // Sprawdź czy nasza drużyna grała jako home czy away w tym meczu
+                    const matchHomeId = match.teams?.home?.id;
+                    const matchAwayId = match.teams?.away?.id;
+                    const playedAsHome = matchHomeId === teamId;
+                    
+                    if (!playedAsHome && matchAwayId !== teamId) continue; // Nasza drużyna nie grała w tym meczu
+                    
+                    const stats = await getMatchStatistics(fixtureId);
+                    if (!stats) continue;
+                    
+                    // Zapisz rożne dla naszej drużyny i łącznie
+                    const ownCorners = playedAsHome ? stats.homeCorners : stats.awayCorners;
+                    cornersOwn.push(ownCorners);
+                    cornersTotal.push(stats.totalCorners);
+                    
+                    history.push({
+                        opponent: playedAsHome ? match.teams?.away?.name : match.teams?.home?.name,
+                        ownCorners,
+                        totalCorners: stats.totalCorners
+                    });
+                    
+                    // Opóźnienie między zapytaniami (żeby nie przekroczyć limitu)
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                }
+                
+                // Oblicz średnie
+                const avgCornersOwn = cornersOwn.length > 0 
+                    ? (cornersOwn.reduce((a, b) => a + b, 0) / cornersOwn.length).toFixed(1)
+                    : '-';
+                const avgCornersTotal = cornersTotal.length > 0
+                    ? (cornersTotal.reduce((a, b) => a + b, 0) / cornersTotal.length).toFixed(1)
+                    : '-';
+                
+                return {
+                    matches: history,
+                    cornersOwn,
+                    cornersTotal,
+                    avgCornersOwn,
+                    avgCornersTotal
+                };
+            } catch (error) {
+                if (error.message === 'LIMIT_ZAPYTAN') {
+                    throw error;
+                }
+                console.error(`❌ Błąd pobierania historii drużyny ${teamId}:`, error);
+                return {
+                    matches: [],
+                    cornersOwn: [],
+                    cornersTotal: [],
+                    avgCornersOwn: '-',
+                    avgCornersTotal: '-'
+                };
+            }
+        }
+        
+        // Analizuj wszystkie mecze
+        async function analyzeAllMatches(matchesList) {
+            const maxMatches = Math.min(10, matchesList.length); // Limit do 10 meczów żeby nie przekroczyć limitu zapytań
+            
+            for (let i = 0; i < maxMatches; i++) {
+                const match = matchesList[i];
+                const homeTeamId = match.teams?.home?.id;
+                const awayTeamId = match.teams?.away?.id;
+                const homeTeamName = match.teams?.home?.name || 'Unknown';
+                const awayTeamName = match.teams?.away?.name || 'Unknown';
+                
+                if (!homeTeamId || !awayTeamId) {
+                    console.warn(`⚠️ Brak ID drużyn w meczu ${i + 1}`);
+                    continue;
+                }
+                
+                console.log(`📊 Analizuję mecz ${i + 1}/${maxMatches}: ${homeTeamName} vs ${awayTeamName}`);
+                
+                try {
+                    // Pobierz historię dla obu drużyn równolegle
+                    const [homeHistory, awayHistory] = await Promise.all([
+                        getTeamHistory(homeTeamId, homeTeamName, true),
+                        getTeamHistory(awayTeamId, awayTeamName, false)
+                    ]);
+                    
+                    // Zapisz historię w obiekcie meczu
+                    match.homeHistory = homeHistory;
+                    match.awayHistory = awayHistory;
+                    
+                    console.log(`   ✅ Home: ${homeHistory.cornersOwn.length} meczów, średnia rożnych: ${homeHistory.avgCornersOwn}, średnia łącznie: ${homeHistory.avgCornersTotal}`);
+                    console.log(`   ✅ Away: ${awayHistory.cornersOwn.length} meczów, średnia rożnych: ${awayHistory.avgCornersOwn}, średnia łącznie: ${awayHistory.avgCornersTotal}`);
+                    
+                } catch (error) {
+                    if (error.message === 'LIMIT_ZAPYTAN') {
+                        throw new Error('❌ Osiągnięto limit zapytań podczas pobierania historii. Przerwano analizę.');
+                    }
+                    console.error(`❌ Błąd analizy meczu ${i + 1}:`, error);
+                }
             }
         }
 
@@ -191,7 +407,6 @@
                 tbody.innerHTML = '<tr><td colspan="5">Brak meczów na dziś</td></tr>';
                     return;
                 }
-                    
                     // Sortuj po lidze, potem po godzinie
             const sortedMatches = [...matchesList].sort((a, b) => {
                         const leagueA = a.league?.name || 'ZZZ';
@@ -213,13 +428,35 @@
                                 time = date.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' });
                 }
                 
+                // Pobierz historię jeśli jest dostępna
+                let historyHtml = '<span style="color:#888;">Brak danych</span>';
+                
+                if (match.homeHistory && match.awayHistory) {
+                    const home = match.homeHistory;
+                    const away = match.awayHistory;
+                    
+                    historyHtml = `
+                        <div style="text-align: left; font-size: 11px; line-height: 1.6;">
+                            <strong style="color:#4a9eff;">🏠 ${homeTeam}:</strong><br>
+                            📊 Ostatnie 5: ${home.cornersOwn.length > 0 ? home.cornersOwn.join(', ') : 'brak'}<br>
+                            📈 Śr. rożnych: ${home.avgCornersOwn}<br>
+                            ⚽ Śr. łącznie: ${home.avgCornersTotal}<br>
+                            <br>
+                            <strong style="color:#ff6b6b;">✈️ ${awayTeam}:</strong><br>
+                            📊 Ostatnie 5: ${away.cornersOwn.length > 0 ? away.cornersOwn.join(', ') : 'brak'}<br>
+                            📈 Śr. rożnych: ${away.avgCornersOwn}<br>
+                            ⚽ Śr. łącznie: ${away.avgCornersTotal}
+                        </div>
+                    `;
+                }
+                
                 const row = document.createElement('tr');
                 row.innerHTML = `
                     <td><strong>${homeTeam} vs ${awayTeam}</strong></td>
-                            <td>${leagueName}</td>
-                            <td>${time}</td>
+                    <td>${leagueName}</td>
+                    <td>${time}</td>
                     <td class="pending">${status}</td>
-                    <td>-</td>
+                    <td style="text-align: left;">${historyHtml}</td>
                 `;
                 tbody.appendChild(row);
             });
