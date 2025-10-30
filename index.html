@@ -4206,90 +4206,64 @@
                     return [];
                 }
                 
-                console.log(`    📡 Pobieram historię meczów dla drużyny ID=${teamId} (ostatnie ${limit} meczów)`);
-                
-                // Lista możliwych endpointów do sprawdzenia
+                // Skrócona lista endpointów - tylko najważniejsze (wszystkie inne zwracają 404)
                 const endpoints = [
                     `/team/${teamId}/matches`,
-                    `/team/${teamId}/fixtures`,
-                    `/teams/${teamId}/matches`,
-                    `/teams/${teamId}/fixtures`,
-                    `/team-matches/${teamId}`,
-                    `/team-fixtures/${teamId}`,
-                    `/matches?team_id=${teamId}`,
-                    `/matches?homeID=${teamId}`,
-                    `/matches?awayID=${teamId}`,
-                    `/fixtures?team_id=${teamId}`
+                    `/matches?team_id=${teamId}`
                 ];
                 
-                let attempts = 0;
-                const maxAttempts = PROXY_SERVICES.length;
+                // Próbuj tylko pierwszy proxy - jeśli endpoint nie istnieje (404), nie ma sensu próbować innych proxy
+                const proxy = getProxy();
                 
-                while (attempts < maxAttempts) {
-                    const proxy = getProxy();
-                    
-                    for (const endpoint of endpoints) {
-                        try {
-                            const url = `${proxy}https://api.football-data-api.com${endpoint}${endpoint.includes('?') ? '&' : '?'}key=${FOOTYSTATS_KEY}&limit=${limit}`;
-                            console.log(`    📡 Próbuję endpoint: ${endpoint}`);
-                            const res = await fetch(url);
-                            
-                            if (!res.ok) {
-                                if (res.status === 403 && attempts < maxAttempts - 1) {
-                                    switchProxy();
-                                    attempts++;
-                                    await new Promise(resolve => setTimeout(resolve, 500));
-                                    break;
-                                } else if (res.status === 404) {
-                                    continue; // Spróbuj następny endpoint
-                                } else {
-                                    continue;
-                                }
+                for (const endpoint of endpoints) {
+                    try {
+                        const url = `${proxy}https://api.football-data-api.com${endpoint}${endpoint.includes('?') ? '&' : '?'}key=${FOOTYSTATS_KEY}&limit=${limit}`;
+                        const res = await fetch(url);
+                        
+                        if (!res.ok) {
+                            if (res.status === 404) {
+                                continue; // Spróbuj następny endpoint
                             }
-                            
-                            const contentType = res.headers.get('content-type');
-                            if (!contentType || !contentType.includes('application/json')) {
-                                continue;
+                            continue;
+                        }
+                        
+                        const contentType = res.headers.get('content-type');
+                        if (!contentType || !contentType.includes('application/json')) {
+                            continue;
                 }
                 
                 const data = await res.json();
                 
-                            // Sprawdź różne możliwe struktury odpowiedzi
+                        // Sprawdź różne możliwe struktury odpowiedzi
                 let matches = [];
                 if (data.data && Array.isArray(data.data)) {
                     matches = data.data;
-                            } else if (Array.isArray(data)) {
-                                matches = data;
+                        } else if (Array.isArray(data)) {
+                            matches = data;
                 } else if (data.matches && Array.isArray(data.matches)) {
                     matches = data.matches;
-                            } else if (data.fixtures && Array.isArray(data.fixtures)) {
-                                matches = data.fixtures;
-                            }
-                            
-                            if (matches && matches.length > 0) {
-                                console.log(`    ✅ Endpoint ${endpoint} DZIAŁA! Znaleziono ${matches.length} meczów`);
-                                // Filtruj tylko zakończone mecze
-                                const finishedMatches = matches.filter(m => {
-                                    const status = m.status || m.match_status || '';
-                                    return status === 'complete' || status === 'finished' || status === 'FT' || m.finished === true;
-                                });
-                                return finishedMatches.slice(0, limit);
-                            }
-                        } catch (e) {
-                            continue;
+                        } else if (data.fixtures && Array.isArray(data.fixtures)) {
+                            matches = data.fixtures;
                         }
+                        
+                        if (matches && matches.length > 0) {
+                            // Filtruj tylko zakończone mecze
+                            const finishedMatches = matches.filter(m => {
+                                const status = m.status || m.match_status || '';
+                                return status === 'complete' || status === 'finished' || status === 'FT' || m.finished === true;
+                            });
+                            return finishedMatches.slice(0, limit);
+                        }
+                    } catch (e) {
+                        continue;
                     }
-                    
-                    if (attempts >= maxAttempts - 1) break;
                 }
                 
                 // Jeśli żaden endpoint nie działa, spróbuj użyć /league-matches dla wszystkich lig z SELECTED_LEAGUES_MAP
                 // i filtruj po ID drużyny
-                console.log(`    ⚠️ Żaden bezpośredni endpoint nie działa, próbuję przez /league-matches...`);
                 return await getFootyStatsTeamMatchesViaLeagueMatches(teamId, limit);
                 
             } catch (e) {
-                console.error(`    ❌ Błąd pobierania historii meczów drużyny ${teamId}:`, e);
                 return [];
             }
         }
@@ -4378,11 +4352,9 @@
                     return dateB - dateA;
                 });
                 
-                console.log(`    ✅ Znaleziono ${result.length} meczów drużyny ${teamId} przez /league-matches`);
                 return result.slice(0, limit);
                 
             } catch (e) {
-                console.error(`    ❌ Błąd pobierania meczów przez /league-matches:`, e);
                 return [];
             }
         }
@@ -4433,7 +4405,6 @@
                 
                 return result;
             } catch (e) {
-                console.error(`    ❌ Błąd pobierania meczów ze statystykami dla drużyny ${teamId}:`, e);
                 return [];
             }
         }
@@ -4448,16 +4419,8 @@
                 const awayTeamId = match.awayID || match.away_id || match.awayId;
                 
                 if (!homeTeamId || !awayTeamId) {
-                    console.warn(`    ⚠️ Brak ID drużyn w meczu ${match.id}`);
                     return null;
                 }
-                
-                const homeName = match.home_name || 'Unknown';
-                const awayName = match.away_name || 'Unknown';
-                
-                console.log(`🔍 Analizuję mecz ${homeName} vs ${awayName} (FootyStats)`);
-                console.log(`    📌 Match ID: ${match.id}`);
-                console.log(`    📌 Home ID: ${homeTeamId}, Away ID: ${awayTeamId}`);
                 
                 // ✅ Pobierz historię ostatnich 5 meczów dla każdej drużyny
                 const homeMatches = await getFootyStatsTeamMatchesWithStats(homeTeamId, 5);
