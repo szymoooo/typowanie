@@ -3137,27 +3137,64 @@
                         return (a.fixture?.timestamp || 0) - (b.fixture?.timestamp || 0);
                     });
                     
-                    let matchNumber = 1;
-                    // Pobierz analizy dla pierwszych 10 meczów równolegle (żeby nie przekroczyć limitu API)
-                    const maxMatchesToAnalyze = Math.min(10, sortedMatches.length);
-                    const analysisPromises = sortedMatches.slice(0, maxMatchesToAnalyze).map(match => 
+                    // ✅ NAJPIERW: Przetwórz mecze przez processFixtures aby zidentyfikować te, które spełniają kryteria
+                    // Wyczyszczenie poprzednich predykcji
+                    predictions = [];
+                    
+                    console.log('📊 Przetwarzanie meczów przez processFixtures...');
+                    // Konwertuj format API-Football do formatu używanego przez processFixtures
+                    const fixturesForProcessing = sortedMatches.map(match => ({
+                        fixture: {
+                            id: match.fixture?.id
+                        },
+                        teams: {
+                            home: {
+                                name: match.teams?.home?.name || 'Unknown'
+                            },
+                            away: {
+                                name: match.teams?.away?.name || 'Unknown'
+                            }
+                        },
+                        league: {
+                            name: match.league?.name || 'Unknown League'
+                        }
+                    }));
+                    
+                    await processFixtures(fixturesForProcessing);
+                    
+                    // Pobierz tylko te mecze, które spełniają kryteria (są w predictions)
+                    const qualifiedMatches = sortedMatches.filter(match => {
+                        return predictions.some(p => p.id === match.fixture?.id);
+                    });
+                    
+                    console.log(`✅ Znaleziono ${qualifiedMatches.length} meczów spełniających kryteria (zgdn.≥30%, śr.≥55%)`);
+                    
+                    // Pobierz analizy TYLKO dla meczów, które spełniają kryteria
+                    const maxMatchesToAnalyze = Math.min(qualifiedMatches.length, 20); // Limit zwiększony do 20
+                    const analysisPromises = qualifiedMatches.slice(0, maxMatchesToAnalyze).map(match => 
                         analyzeMatchData(match).catch(e => {
                             console.warn(`⚠️ Błąd analizy meczu ${match.fixture?.id}:`, e);
                             return null;
                         })
                     );
                     
-                    console.log(`📊 Analizuję ${maxMatchesToAnalyze} meczów (żeby nie przekroczyć limitu API)`);
+                    console.log(`📊 Analizuję ${maxMatchesToAnalyze} meczów spełniających kryteria`);
                     
                     const analyses = await Promise.all(analysisPromises);
                     const analysisMap = new Map();
                     analyses.forEach((analysis, index) => {
-                        if (analysis && sortedMatches[index]) {
-                            analysisMap.set(sortedMatches[index].fixture?.id, analysis);
+                        if (analysis && qualifiedMatches[index]) {
+                            analysisMap.set(qualifiedMatches[index].fixture?.id, analysis);
                         }
                     });
                     
-                    sortedMatches.forEach((match, index) => {
+                    // Wyświetl TYLKO mecze spełniające kryteria (z predictions)
+                    let matchNumber = 1;
+                    const displayMatches = sortedMatches.filter(match => {
+                        return predictions.some(p => p.id === match.fixture?.id);
+                    });
+                    
+                    displayMatches.forEach((match, index) => {
                         // Parsuj nazwę meczu
                         const homeName = match.teams?.home?.name || 'Unknown';
                         const awayName = match.teams?.away?.name || 'Unknown';
@@ -3227,7 +3264,7 @@
                     
                     document.getElementById('info').innerHTML = `
                         ✅ <strong>API-FOOTBALL</strong> - Znaleziono <strong>${matches.length} meczów</strong> z <strong>${uniqueLeagues.size} lig</strong><br>
-                        <small style="color:#aaa;">📅 Data: ${today} | Limit: ${data.requests?.current || '?'}/${data.requests?.limit_day || '100'} zapytań dzisiaj | Analiza dla pierwszych ${maxMatchesToAnalyze} meczów</small>
+                        <small style="color:#aaa;">📅 Data: ${today} | Limit: ${data.requests?.current || '?'}/${data.requests?.limit_day || '100'} zapytań dzisiaj | Wyświetlanie ${displayMatches.length} meczów spełniających kryteria (zgdn.≥30%, śr.≥55%) | Analiza dla ${maxMatchesToAnalyze} meczów</small>
                     `;
                     
                     // Wyświetl szczegóły w konsoli
@@ -3461,10 +3498,6 @@
                 
                 console.log(`  1️⃣ Sportmonks: ${p1 ? p1 + '% (analiza 10 meczów)' : 'BRAK DANYCH'}`);
                 console.log(`  2️⃣ FootyStats: ${p2 ? p2 + '% (analiza 10 meczów) ✅ WŁĄCZONY' : 'BRAK DANYCH'}`);
-                console.log(`  3️⃣ API-Football: WYŁĄCZONE (limit)`);
-                console.log(`  4️⃣ TotalCorner: USUNIĘTE`);
-                console.log(`  5️⃣ BetOnCorners: USUNIĘTE`);
-                console.log(`  6️⃣ CornerStat: USUNIĘTE`);
                 
                 // Zwróć tylko te które mają wartość
                 const probs = [p1, p2, p3, p4, p5, p6].filter(p => p !== null);
@@ -3697,48 +3730,12 @@
         }
         
         // Helper: Pobierz ostatnie mecze drużyny z FootyStats
+        // UWAGA: Endpoint /team-matches nie istnieje w FootyStats API - zwraca 404
+        // Wyłączamy tę funkcję, ponieważ FootyStats nie oferuje endpointu do pobierania historii meczów drużyny
         async function getFootyStatsTeamMatches(teamSlug, limit = 10) {
-            try {
-                // PROXY jest KONIECZNY dla FootyStats (CORS)!
-                // POPRAWNY URL: api.football-data-api.com (NIE api.footystats.org)
-                const url = `${PROXY}https://api.football-data-api.com/team-matches?key=${FOOTYSTATS_KEY}&team=${teamSlug}`;
-                console.log(`    📡 FootyStats URL: ${url}`);
-                
-                const res = await fetch(url);
-                if (!res.ok) {
-                    console.warn(`    ⚠️ FootyStats: błąd ${res.status}`);
-                    return [];
-                }
-                
-                const data = await res.json();
-                console.log(`    📦 FootyStats odpowiedź dla ${teamSlug}:`, data);
-                
-                // FootyStats może zwracać różne struktury danych
-                // Próbujemy kilka wariantów
-                let matches = [];
-                if (data.data && Array.isArray(data.data)) {
-                    matches = data.data;
-                } else if (data.matches && Array.isArray(data.matches)) {
-                    matches = data.matches;
-                } else if (Array.isArray(data)) {
-                    matches = data;
-                }
-                
-                // Filtruj tylko zakończone mecze
-                const finishedMatches = matches.filter(m => 
-                    m.status === 'complete' || 
-                    m.status === 'finished' || 
-                    m.finished === true ||
-                    (m.homeGoalCount !== undefined && m.awayGoalCount !== undefined)
-                );
-                
-                console.log(`    ✅ Znaleziono ${finishedMatches.length} zakończonych meczów dla ${teamSlug}`);
-                return finishedMatches.slice(0, limit);
-                
-            } catch (e) {
-                console.error(`    ❌ Błąd pobierania meczów z FootyStats:`, e.message);
-                return [];
-            }
+            // Endpoint nie istnieje - zwracamy pustą tablicę
+            // W przyszłości można użyć innych endpointów FootyStats jeśli będą dostępne
+            return [];
         }
 
         // === 3. API-FOOTBALL ===
