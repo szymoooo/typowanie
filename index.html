@@ -2641,13 +2641,22 @@
                         await new Promise(resolve => setTimeout(resolve, 1000));
                         continue;
                     }
+                } else if (res1.status === 429) {
+                    console.warn(`⚠️ Zbyt wiele żądań (429) - rate limit`);
+                    switchProxy();
+                    attempts++;
+                    if (attempts < maxAttempts) {
+                        await new Promise(resolve => setTimeout(resolve, 2000));
+                        continue;
+                    }
                 } else {
                     break;
                 }
             }
             
             if (attempts >= maxAttempts || !res1.ok) {
-                console.warn(`⚠️ Nie można pobrać z /league-list: HTTP ${res1.status}`);
+                const status = res1?.status || 'unknown';
+                console.warn(`⚠️ Nie można pobrać z /league-list: HTTP ${status}`);
                 console.warn('   Używam tylko STATIC_LEAGUES_MAP (1727 lig)');
                 footyStatsLeagues = {};
                 return {};
@@ -2864,6 +2873,15 @@
                             await new Promise(resolve => setTimeout(resolve, 1000));
                             continue;
                         }
+                    } else if (res.status === 429) {
+                        console.warn(`⚠️ Zbyt wiele żądań (429) - rate limit`);
+                        // Dla 429 próbuj kolejny proxy, ale z większym opóźnieniem
+                        switchProxy();
+                        attempts++;
+                        if (attempts < maxAttempts) {
+                            await new Promise(resolve => setTimeout(resolve, 2000));
+                            continue;
+                        }
                     } else {
                         // Inny błąd - nie próbuj dalej
                         break;
@@ -2871,8 +2889,12 @@
                 }
                 
                 if (attempts >= maxAttempts || !res.ok) {
-                    console.error(`❌ FootyStats zwrócił status ${res.status} po ${maxAttempts} próbach`);
-                    throw new Error(`Nie można pobrać meczów z FootyStats (HTTP ${res.status}). Wszystkie proxy zwróciły 403. Spróbuj za chwilę lub użyj VPN.`);
+                    const status = res?.status || 'unknown';
+                    const errorMsg = status === 429 
+                        ? `Nie można pobrać meczów z FootyStats (HTTP 429 - zbyt wiele żądań). Spróbuj za chwilę.`
+                        : `Nie można pobrać meczów z FootyStats (HTTP ${status}). Wszystkie proxy zwróciły błąd. Spróbuj za chwilę lub użyj VPN.`;
+                    console.error(`❌ FootyStats zwrócił status ${status} po ${maxAttempts} próbach`);
+                    throw new Error(errorMsg);
                 }
                 
                 const contentType = res.headers.get('content-type');
@@ -4156,6 +4178,12 @@
                                 attempts++;
                                 await new Promise(resolve => setTimeout(resolve, 500));
                                 continue;
+                            } else if (res.status === 429 && attempts < maxAttempts - 1) {
+                                console.log(`    ⚠️ Zbyt wiele żądań (429), próbuję następnego proxy z opóźnieniem...`);
+                                switchProxy();
+                                attempts++;
+                                await new Promise(resolve => setTimeout(resolve, 2000));
+                                continue;
                             } else if (res.status === 404) {
                                 console.log(`    ⚠️ Mecz ${matchId} nie istnieje (404) - może mecz jeszcze się nie rozpoczął lub ID jest niepoprawne`);
                                 return null; // Mecz nie istnieje
@@ -4298,6 +4326,11 @@
                                     switchProxy();
                                     attempts++;
                                     await new Promise(resolve => setTimeout(resolve, 500));
+                                    continue;
+                                } else if (res.status === 429 && attempts < maxAttempts - 1) {
+                                    switchProxy();
+                                    attempts++;
+                                    await new Promise(resolve => setTimeout(resolve, 2000));
                                     continue;
                                 }
                                 break;
