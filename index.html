@@ -159,7 +159,7 @@
         });
 
         // Funkcja pomocnicza do przetwarzania meczów
-        async function processFixtures(fixtures) {
+        async function processFixtures(fixtures, apiFilter = null) {
                 for (let fix of fixtures) {
                     const home = fix.teams.home.name;
                     const away = fix.teams.away.name;
@@ -168,7 +168,7 @@
 
                 console.log(`\n🎯 Analizuję: ${home} vs ${away}`);
 
-                    const probs = await getAllProbabilities(home, away, id, league);
+                    const probs = await getAllProbabilities(home, away, id, league, apiFilter);
                 if (!probs) {
                     console.log('❌ Błąd pobierania prawdopodobieństw');
                     continue;
@@ -385,8 +385,8 @@
                     document.getElementById('api-status').innerHTML = '✅ <strong>Sportmonks działa poprawnie</strong> (API-Football wyłączone do testu)';
                 }
                 
-                // Przetwórz mecze ze Sportmonks
-                await processFixtures(fixtures);
+                // Przetwórz mecze ze Sportmonks - TYLKO Sportmonks
+                await processFixtures(fixtures, 'sportmonks');
                 await displayResults();
             } catch (e) {
                 console.error('💥 BŁĄD:', e);
@@ -3378,7 +3378,7 @@
                         }
                     }));
                     
-                    await processFixtures(fixturesForProcessing);
+                    await processFixtures(fixturesForProcessing, 'apifootball');
                     
                     // Pobierz tylko te mecze, które spełniają kryteria (są w predictions)
                     const qualifiedMatches = sortedMatches.filter(match => {
@@ -3699,17 +3699,32 @@
         // Helper: opóźnienie
         const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-        async function getAllProbabilities(home, away, id, league) {
+        async function getAllProbabilities(home, away, id, league, apiFilter = null) {
             try {
                 console.log('  📡 Pobieranie prawdopodobieństw z API...');
                 
-                // ✅ WŁĄCZONE: Tylko stabilne źródła API!
-                const p1 = await getSportmonksProb(home, away); // Analiza ostatnich 10 meczów
+                // apiFilter: 'sportmonks', 'footystats', 'apifootball', lub null (wszystkie)
+                let p1 = null, p2 = null, p3 = null;
                 
+                if (!apiFilter || apiFilter === 'sportmonks') {
+                    p1 = await getSportmonksProb(home, away); // Analiza ostatnich 10 meczów
                 await delay(500); // Opóźnienie przed następnym
+                }
                 
-                const p2 = await getFootyStatsProb(home, away);
-                const p3 = null; // API-Football - wyłączone (limit)
+                if (!apiFilter || apiFilter === 'footystats') {
+                    p2 = await getFootyStatsProb(home, away);
+                    await delay(500); // Opóźnienie przed następnym
+                }
+                
+                if (!apiFilter || apiFilter === 'apifootball') {
+                    // API-Football - jeśli wybrano tylko to API, nie pobieraj innych
+                    if (apiFilter === 'apifootball') {
+                        // Dla API-Football nie używamy prawdopodobieństw - wyświetlamy wszystkie mecze
+                        p3 = null;
+                    } else {
+                        p3 = null; // API-Football - wyłączone (limit)
+                    }
+                }
                 const p4 = null; // TotalCorner - USUNIĘTE (web scraping niestabilny)
                 const p5 = null; // BetOnCorners - USUNIĘTE (web scraping niestabilny)
                 const p6 = null; // CornerStat - USUNIĘTE (web scraping niestabilny)
@@ -4089,8 +4104,8 @@
                 console.log(`    📌 IDs: ${home} = ${homeId}, ${away} = ${awayId}`);
                 
                 // 2. Pobierz ostatnie 10 meczów obu drużyn
-                const homeMatches = await getFootyStatsTeamMatches(homeId, 10);
-                const awayMatches = await getFootyStatsTeamMatches(awayId, 10);
+                const homeMatches = await getFootyStatsTeamMatchesWithStats(homeId, 10);
+                const awayMatches = await getFootyStatsTeamMatchesWithStats(awayId, 10);
                 
                 // 3. Zlicz ile meczów miało over 9.5 rożnych
                 let homeOver = 0, homeTotal = 0;
