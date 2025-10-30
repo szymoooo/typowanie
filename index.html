@@ -2929,8 +2929,15 @@
                 
                 console.log(`✅ FootyStats: Po filtrowaniu zostało ${matches.length} meczów (z ${allMatches.length} pobranych)`);
                 console.log(`   📅 Mecze z dziś + LIVE + zakończone z ostatnich 24h`);
-                    console.log(`🌍 Data lokalna użytkownika: ${new Date().toLocaleString('pl-PL')}`);
-                    
+                console.log(`🌍 Data lokalna użytkownika: ${new Date().toLocaleString('pl-PL')}`);
+                
+                // ✅ TEST: Sprawdź dostępne endpointy dla pierwszego meczu
+                if (matches.length > 0) {
+                    const firstMatchId = matches[0].id || matches[0].match_id;
+                    console.log(`🔍 TEST: Sprawdzam endpointy FootyStats dla meczu ${firstMatchId}...`);
+                    await testFootyStatsEndpoints(firstMatchId);
+                }
+                
                 // ✅ KROK: Pobierz nazwy lig dla wszystkich ID które nie są w mapie
                 const uniqueLeagueIds = [...new Set(matches.map(m => m.competition_id || m.league_id || m.leagueId || m.competitionID).filter(Boolean))];
                 console.log(`🔍 Znaleziono ${uniqueLeagueIds.length} unikalnych ID lig w meczach`);
