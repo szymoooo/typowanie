@@ -4133,6 +4133,13 @@
         // Helper: Pobierz szczegóły meczu z FootyStats używając endpointu /match?match_id=X
         async function getFootyStatsMatchDetails(matchId) {
             try {
+                if (!matchId) {
+                    console.warn(`    ⚠️ Brak match_id dla meczu`);
+                    return null;
+                }
+                
+                console.log(`    📡 Pobieram szczegóły meczu match_id=${matchId} z endpointu /match`);
+                
                 let attempts = 0;
                 const maxAttempts = PROXY_SERVICES.length;
                 
@@ -4145,30 +4152,37 @@
                         
                         if (!res.ok) {
                             if (res.status === 403 && attempts < maxAttempts - 1) {
+                                console.log(`    ⚠️ Proxy zablokowany (403), próbuję następnego...`);
                                 switchProxy();
                                 attempts++;
                                 await new Promise(resolve => setTimeout(resolve, 500));
                                 continue;
                             } else if (res.status === 404) {
+                                console.log(`    ⚠️ Mecz ${matchId} nie istnieje (404) - może mecz jeszcze się nie rozpoczął lub ID jest niepoprawne`);
                                 return null; // Mecz nie istnieje
                             } else {
+                                console.log(`    ⚠️ Status ${res.status} dla meczu ${matchId}`);
                                 return null;
                             }
                         }
                         
                         const contentType = res.headers.get('content-type');
                         if (!contentType || !contentType.includes('application/json')) {
+                            console.log(`    ⚠️ Odpowiedź nie jest JSON dla meczu ${matchId}`);
                             return null;
                         }
                         
                         const data = await res.json();
                         
                         if (data.success && data.data) {
+                            console.log(`    ✅ Pobrano szczegóły meczu ${matchId} - dostępne pola:`, Object.keys(data.data).slice(0, 20));
                             return data.data;
+                        } else {
+                            console.log(`    ⚠️ Odpowiedź nie zawiera data.success lub data.data dla meczu ${matchId}`);
+                            return null;
                         }
-                        
-                        return null;
                     } catch (e) {
+                        console.log(`    ⚠️ Błąd pobierania meczu ${matchId}:`, e.message);
                         if (attempts < maxAttempts - 1) {
                             switchProxy();
                             attempts++;
@@ -4217,9 +4231,17 @@
                 const awayName = match.away_name || 'Unknown';
                 
                 console.log(`🔍 Analizuję mecz ${homeName} vs ${awayName} (FootyStats)`);
+                console.log(`    📌 Match ID: ${match.id}`);
+                console.log(`    📌 Home ID: ${homeTeamId}, Away ID: ${awayTeamId}`);
                 
                 // Pobierz szczegóły meczu z endpointu /match (zawiera więcej danych + h2h)
                 const matchDetails = await getFootyStatsMatchDetails(match.id);
+                
+                if (matchDetails) {
+                    console.log(`    ✅ Pobrano szczegóły meczu - status: ${matchDetails.status}, corners: ${matchDetails.team_a_corners}/${matchDetails.team_b_corners}`);
+                } else {
+                    console.log(`    ⚠️ Nie udało się pobrać szczegółów meczu - używam danych z /todays-matches`);
+                }
                 
                 // Jeśli mecz się już rozpoczął/zakończył, użyj danych z meczu
                 const status = match.status || match.match_status || '';
