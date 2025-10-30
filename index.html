@@ -3759,63 +3759,88 @@
         // Helper: Pobierz ostatnie mecze drużyny ze statystykami (rozszerzona wersja dla analizy)
         async function getSportmonksTeamMatchesWithStats(teamId, limit = 5) {
             try {
-                // Pobierz drużynę z ostatnimi meczami i statystykami
-                const url = `${PROXY}https://api.sportmonks.com/v3/football/teams/${teamId}?include=latest.statistics.type,latest.participants&api_token=${SPORTMONKS_KEY}`;
+                // KROK 1: Pobierz drużynę z ostatnimi meczami (bez statystyk - endpoint z include=latest.statistics.type zwraca 404)
+                const url = `${PROXY}https://api.sportmonks.com/v3/football/teams/${teamId}?include=latest&api_token=${SPORTMONKS_KEY}`;
                 const res = await fetch(url);
-                if (!res.ok) return [];
+                if (!res.ok) {
+                    console.warn(`    ⚠️ Nie można pobrać danych drużyny ${teamId}: HTTP ${res.status}`);
+                    return [];
+                }
                 const data = await res.json();
                 
                 const matches = data.data?.latest || [];
                 const result = [];
                 
-                // Pobierz ostatnie N zakończonych meczów ze statystykami
+                // KROK 2: Dla każdego meczu pobierz statystyki osobno
                 for (const match of matches) {
                     if (result.length >= limit) break;
                     if (match.state_id !== 5 && match.state_id !== 6 && match.state_id !== 7) continue; // Tylko zakończone
                     
-                    const stats = match.statistics || [];
-                    const participants = match.participants || [];
-                    
-                    // Znajdź participant_id dla naszej drużyny
-                    const teamParticipant = participants.find(p => p.id === teamId);
-                    const isHome = teamParticipant?.meta?.location === 'home';
-                    
-                    // Znajdź statystyki dla naszej drużyny i przeciwnika
-                    const teamStats = stats.filter(s => s.participant_id === teamId);
-                    const opponentStats = stats.filter(s => s.participant_id !== teamId);
-                    
-                    // Parsuj statystyki
-                    const getStatValue = (statsArray, typeId) => {
-                        const stat = statsArray.find(s => s.type_id === typeId);
-                        return stat ? parseInt(stat.data?.value || 0) : 0;
-                    };
-                    
-                    // type_id 34 = Corners, 45 = Possession, 52 = Shots on Goal, 53 = Total Shots
-                    const corners = getStatValue(teamStats, 34);
-                    const oppCorners = getStatValue(opponentStats, 34);
-                    const totalCorners = corners + oppCorners;
-                    const possession = getStatValue(teamStats, 45);
-                    const shotsOnGoal = getStatValue(teamStats, 52);
-                    const totalShots = getStatValue(teamStats, 53);
-                    
-                    // Ataki niebezpieczne mogą być w różnych type_id, sprawdzamy kilka
-                    const dangerousAttacks = getStatValue(teamStats, 91) || getStatValue(teamStats, 92) || 0;
-                    const attacks = getStatValue(teamStats, 90) || dangerousAttacks;
-                    
-                    result.push({
-                        corners_home: isHome ? corners : oppCorners,
-                        corners_away: isHome ? oppCorners : corners,
-                        corners_own: corners,
-                        corners_total: totalCorners,
-                        possession: possession,
-                        shots_on_goal: shotsOnGoal,
-                        total_shots: totalShots,
-                        dangerous_attacks: dangerousAttacks,
-                        attacks: attacks,
-                        team_id: teamId,
-                        match_id: match.id,
-                        is_home: isHome
-                    });
+                    try {
+                        // Pobierz statystyki dla tego meczu
+                        const statsUrl = `${PROXY}https://api.sportmonks.com/v3/football/fixtures/${match.id}?include=statistics.type,participants&api_token=${SPORTMONKS_KEY}`;
+                        const statsRes = await fetch(statsUrl);
+                        
+                        if (!statsRes.ok) {
+                            console.warn(`    ⚠️ Nie można pobrać statystyk meczu ${match.id}: HTTP ${statsRes.status}`);
+                            continue;
+                        }
+                        
+                        const statsData = await statsRes.json();
+                        const fixture = statsData.data;
+                        
+                        if (!fixture) continue;
+                        
+                        const stats = fixture.statistics || [];
+                        const participants = fixture.participants || [];
+                        
+                        // Znajdź participant_id dla naszej drużyny
+                        const teamParticipant = participants.find(p => p.id === teamId);
+                        const isHome = teamParticipant?.meta?.location === 'home';
+                        
+                        // Znajdź statystyki dla naszej drużyny i przeciwnika
+                        const teamStats = stats.filter(s => s.participant_id === teamId);
+                        const opponentStats = stats.filter(s => s.participant_id !== teamId);
+                        
+                        // Parsuj statystyki
+                        const getStatValue = (statsArray, typeId) => {
+                            const stat = statsArray.find(s => s.type_id === typeId);
+                            return stat ? parseInt(stat.data?.value || 0) : 0;
+                        };
+                        
+                        // type_id 34 = Corners, 45 = Possession, 52 = Shots on Goal, 53 = Total Shots
+                        const corners = getStatValue(teamStats, 34);
+                        const oppCorners = getStatValue(opponentStats, 34);
+                        const totalCorners = corners + oppCorners;
+                        const possession = getStatValue(teamStats, 45);
+                        const shotsOnGoal = getStatValue(teamStats, 52);
+                        const totalShots = getStatValue(teamStats, 53);
+                        
+                        // Ataki niebezpieczne mogą być w różnych type_id, sprawdzamy kilka
+                        const dangerousAttacks = getStatValue(teamStats, 91) || getStatValue(teamStats, 92) || 0;
+                        const attacks = getStatValue(teamStats, 90) || dangerousAttacks;
+                        
+                        result.push({
+                            corners_home: isHome ? corners : oppCorners,
+                            corners_away: isHome ? oppCorners : corners,
+                            corners_own: corners,
+                            corners_total: totalCorners,
+                            possession: possession,
+                            shots_on_goal: shotsOnGoal,
+                            total_shots: totalShots,
+                            dangerous_attacks: dangerousAttacks,
+                            attacks: attacks,
+                            team_id: teamId,
+                            match_id: match.id,
+                            is_home: isHome
+                        });
+                        
+                        // Małe opóźnienie między zapytaniami aby nie przekroczyć limitu API
+                        await new Promise(resolve => setTimeout(resolve, 300));
+                    } catch (e) {
+                        console.warn(`    ⚠️ Błąd pobierania statystyk meczu ${match.id}:`, e.message);
+                        continue;
+                    }
                 }
                 
                 return result;
