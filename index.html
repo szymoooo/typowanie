@@ -3126,6 +3126,7 @@
                         <th>Mecz</th>
                         <th>Liga</th>
                         <th>Status</th>
+                        <th>Analiza</th>
                     </tr>`;
                     
                     // Sortuj po lidze, potem po godzinie
@@ -3137,7 +3138,26 @@
                     });
                     
                     let matchNumber = 1;
-                    sortedMatches.forEach(match => {
+                    // Pobierz analizy dla pierwszych 10 meczów równolegle (żeby nie przekroczyć limitu API)
+                    const maxMatchesToAnalyze = Math.min(10, sortedMatches.length);
+                    const analysisPromises = sortedMatches.slice(0, maxMatchesToAnalyze).map(match => 
+                        analyzeMatchData(match).catch(e => {
+                            console.warn(`⚠️ Błąd analizy meczu ${match.fixture?.id}:`, e);
+                            return null;
+                        })
+                    );
+                    
+                    console.log(`📊 Analizuję ${maxMatchesToAnalyze} meczów (żeby nie przekroczyć limitu API)`);
+                    
+                    const analyses = await Promise.all(analysisPromises);
+                    const analysisMap = new Map();
+                    analyses.forEach((analysis, index) => {
+                        if (analysis && sortedMatches[index]) {
+                            analysisMap.set(sortedMatches[index].fixture?.id, analysis);
+                        }
+                    });
+                    
+                    sortedMatches.forEach((match, index) => {
                         // Parsuj nazwę meczu
                         const homeName = match.teams?.home?.name || 'Unknown';
                         const awayName = match.teams?.away?.name || 'Unknown';
@@ -3169,11 +3189,36 @@
                             }
                         }
                         
+                        // Pobierz analizę dla tego meczu
+                        const analysis = analysisMap.get(match.fixture?.id);
+                        let analysisHtml = '<span style="color:#888; font-size: 11px;">Brak danych</span>';
+                        
+                        if (analysis) {
+                            analysisHtml = `
+                                <div style="font-size: 10px; line-height: 1.3; max-width: 300px;">
+                                    <strong style="color:#4a9eff;">🏠 ${homeName}:</strong><br>
+                                    📊 Ostatnie 5: ${analysis.home.cornersOwn || '-'} rożnych<br>
+                                    📈 Śr. rożnych: ${analysis.home.cornersAvg || '-'}<br>
+                                    ⚽ Śr. łącznie: ${analysis.home.cornersTotalAvg || '-'}<br>
+                                    🎯 Posiadanie: ${analysis.home.possessionAvg || '-'}%<br>
+                                    🔥 Intensywność: ${analysis.home.attackIntensity || '-'}<br>
+                                    <br>
+                                    <strong style="color:#ff6b6b;">✈️ ${awayName}:</strong><br>
+                                    📊 Ostatnie 5: ${analysis.away.cornersOwn || '-'} rożnych<br>
+                                    📈 Śr. rożnych: ${analysis.away.cornersAvg || '-'}<br>
+                                    ⚽ Śr. łącznie: ${analysis.away.cornersTotalAvg || '-'}<br>
+                                    🎯 Posiadanie: ${analysis.away.possessionAvg || '-'}%<br>
+                                    🔥 Intensywność: ${analysis.away.attackIntensity || '-'}
+                                </div>
+                            `;
+                        }
+                        
                         html += `<tr>
                             <td>${matchNumber}</td>
                             <td><strong>${matchName}</strong></td>
                             <td>${leagueName}</td>
                             <td>${time}</td>
+                            <td style="text-align: left;">${analysisHtml}</td>
                         </tr>`;
                         matchNumber++;
                     });
@@ -3182,7 +3227,7 @@
                     
                     document.getElementById('info').innerHTML = `
                         ✅ <strong>API-FOOTBALL</strong> - Znaleziono <strong>${matches.length} meczów</strong> z <strong>${uniqueLeagues.size} lig</strong><br>
-                        <small style="color:#aaa;">📅 Data: ${today} | Limit: ${data.requests?.current || '?'}/${data.requests?.limit_day || '100'} zapytań dzisiaj</small>
+                        <small style="color:#aaa;">📅 Data: ${today} | Limit: ${data.requests?.current || '?'}/${data.requests?.limit_day || '100'} zapytań dzisiaj | Analiza dla pierwszych ${maxMatchesToAnalyze} meczów</small>
                     `;
                     
                     // Wyświetl szczegóły w konsoli
@@ -3203,6 +3248,197 @@
             }
             
             document.getElementById('loader').style.display = 'none';
+        }
+
+        // ✅ ANALIZA DANYCH DLA KAŻDEGO MECZU (API-Football)
+        async function analyzeMatchData(match) {
+            try {
+                const homeTeamId = match.teams?.home?.id;
+                const awayTeamId = match.teams?.away?.id;
+                const fixtureId = match.fixture?.id;
+                
+                if (!homeTeamId || !awayTeamId || !fixtureId) {
+                    return null;
+                }
+                
+                console.log(`🔍 Analizuję mecz ${match.teams?.home?.name} vs ${match.teams?.away?.name} (ID: ${fixtureId})`);
+                
+                // Pobierz ostatnie 5 meczów dla każdej drużyny
+                const homeMatches = await getApiFootballTeamLastMatches(homeTeamId, 5);
+                const awayMatches = await getApiFootballTeamLastMatches(awayTeamId, 5);
+                
+                // Analiza dla drużyny domowej (w obecnym meczu gra jako home)
+                const homeAnalysis = analyzeTeamStats(homeMatches, homeTeamId);
+                
+                // Analiza dla drużyny wyjazdowej (w obecnym meczu gra jako away)
+                const awayAnalysis = analyzeTeamStats(awayMatches, awayTeamId);
+                
+                console.log(`✅ Analiza zakończona dla meczu ${fixtureId}`);
+                console.log(`   Home: ${homeAnalysis.cornersAvg} rożnych (śr.), ${homeAnalysis.possessionAvg}% posiadania`);
+                console.log(`   Away: ${awayAnalysis.cornersAvg} rożnych (śr.), ${awayAnalysis.possessionAvg}% posiadania`);
+                
+                return {
+                    home: homeAnalysis,
+                    away: awayAnalysis,
+                    fixtureId: fixtureId
+                };
+                
+            } catch (e) {
+                console.error(`❌ Błąd analizy meczu ${match.fixture?.id}:`, e);
+                return null;
+            }
+        }
+        
+        // Pobierz ostatnie N meczów drużyny z API-Football
+        async function getApiFootballTeamLastMatches(teamId, limit = 5) {
+            try {
+                const url = `${PROXY}https://v3.football.api-sports.io/fixtures?team=${teamId}&last=${limit}&status=FT`;
+                const res = await fetch(url, {
+                    headers: {
+                        'x-apisports-key': API_FOOTBALL_KEYS[0]
+                    }
+                });
+                
+                if (!res.ok) {
+                    console.warn(`⚠️ Błąd pobierania meczów dla drużyny ${teamId}: HTTP ${res.status}`);
+                    return [];
+                }
+                
+                const data = await res.json();
+                const matches = data.response || [];
+                
+                // Pobierz statystyki dla każdego meczu
+                const matchesWithStats = await Promise.all(
+                    matches.map(async (match) => {
+                        try {
+                            const statsUrl = `${PROXY}https://v3.football.api-sports.io/fixtures/statistics?fixture=${match.fixture.id}`;
+                            const statsRes = await fetch(statsUrl, {
+                                headers: {
+                                    'x-apisports-key': API_FOOTBALL_KEYS[0]
+                                }
+                            });
+                            
+                            if (!statsRes.ok) return match;
+                            
+                            const statsData = await statsRes.json();
+                            match.statistics = statsData.response || [];
+                            
+                            // Małe opóźnienie żeby nie przekroczyć limitu API
+                            await delay(100);
+                            
+                            return match;
+                        } catch (e) {
+                            console.warn(`⚠️ Błąd pobierania statystyk dla meczu ${match.fixture.id}:`, e);
+                            return match;
+                        }
+                    })
+                );
+                
+                return matchesWithStats;
+                
+            } catch (e) {
+                console.error(`❌ Błąd pobierania ostatnich meczów dla drużyny ${teamId}:`, e);
+                return [];
+            }
+        }
+        
+        // Analiza statystyk drużyny z ostatnich meczów
+        function analyzeTeamStats(matches, teamId) {
+            if (!matches || matches.length === 0) {
+                return {
+                    cornersOwn: '-',
+                    cornersAvg: '-',
+                    cornersTotalAvg: '-',
+                    possessionAvg: '-',
+                    attackIntensity: '-'
+                };
+            }
+            
+            const cornersOwn = [];
+            const cornersTotal = [];
+            const possessions = [];
+            const shotsOnTarget = [];
+            const shotsTotal = [];
+            const attacks = [];
+            const dangerousAttacks = [];
+            
+            matches.forEach(match => {
+                if (!match.statistics || match.statistics.length < 2) return;
+                
+                // Określ czy nasza drużyna grała jako home czy away w TYM meczu
+                const isHomeInThisMatch = match.teams?.home?.id === teamId;
+                
+                const teamIndex = isHomeInThisMatch ? 0 : 1;
+                const opponentIndex = isHomeInThisMatch ? 1 : 0;
+                const teamStats = match.statistics[teamIndex]?.statistics || [];
+                const opponentStats = match.statistics[opponentIndex]?.statistics || [];
+                
+                // Znajdź statystyki
+                const getStatValue = (stats, statName) => {
+                    const stat = stats.find(s => s.type === statName);
+                    if (!stat) return 0;
+                    // Posiadanie może być w formacie "45%" - usuń %
+                    const value = stat.value || '0';
+                    const parsed = typeof value === 'string' ? value.replace('%', '') : value;
+                    return parseInt(parsed) || 0;
+                };
+                
+                const corners = getStatValue(teamStats, 'Corner Kicks');
+                const oppCorners = getStatValue(opponentStats, 'Corner Kicks');
+                const totalCorners = corners + oppCorners;
+                const possession = getStatValue(teamStats, 'Ball Possession');
+                const shotsOn = getStatValue(teamStats, 'Shots on Goal');
+                const shotsTotalCount = getStatValue(teamStats, 'Total Shots');
+                const attacksCount = getStatValue(teamStats, 'Attacks');
+                const dangerousAttacksCount = getStatValue(teamStats, 'Dangerous Attacks');
+                
+                cornersOwn.push(corners);
+                cornersTotal.push(totalCorners);
+                if (possession > 0) possessions.push(possession);
+                shotsOnTarget.push(shotsOn);
+                shotsTotal.push(shotsTotalCount);
+                attacks.push(attacksCount);
+                dangerousAttacks.push(dangerousAttacksCount);
+            });
+            
+            // Oblicz średnie
+            const avgCornersOwn = cornersOwn.length > 0 
+                ? (cornersOwn.reduce((a, b) => a + b, 0) / cornersOwn.length).toFixed(1)
+                : '-';
+            const avgCornersTotal = cornersTotal.length > 0
+                ? (cornersTotal.reduce((a, b) => a + b, 0) / cornersTotal.length).toFixed(1)
+                : '-';
+            const avgPossession = possessions.length > 0
+                ? Math.round(possessions.reduce((a, b) => a + b, 0) / possessions.length)
+                : '-';
+            
+            // Oblicz wskaźnik intensywności ataku
+            // Wskaźnik = (średnia strzałów na bramkę + średnia ataków niebezpiecznych + średnia ataków) / 3
+            // Wyższy wskaźnik = bardziej atakująca drużyna
+            let attackIntensity = '-';
+            if (shotsOnTarget.length > 0 && attacks.length > 0 && dangerousAttacks.length > 0) {
+                const avgShotsOn = shotsOnTarget.reduce((a, b) => a + b, 0) / shotsOnTarget.length;
+                const avgShotsTotal = shotsTotal.reduce((a, b) => a + b, 0) / shotsTotal.length;
+                const avgDangerousAttacks = dangerousAttacks.reduce((a, b) => a + b, 0) / dangerousAttacks.length;
+                const avgAttacks = attacks.reduce((a, b) => a + b, 0) / attacks.length;
+                
+                // Znormalizuj do skali 0-100 (wyższa = bardziej atakująca)
+                const intensity = (avgShotsOn * 5 + avgDangerousAttacks * 2 + avgAttacks * 0.1) / 3;
+                const normalized = Math.min(100, Math.max(0, Math.round(intensity * 10)));
+                
+                attackIntensity = normalized >= 70 ? `🔥🔥🔥 ${normalized}` : 
+                                  normalized >= 50 ? `🔥🔥 ${normalized}` : 
+                                  normalized >= 30 ? `🔥 ${normalized}` : 
+                                  `${normalized}`;
+            }
+            
+            return {
+                cornersOwn: cornersOwn.join(', '),
+                cornersAvg: avgCornersOwn,
+                cornersTotalAvg: avgCornersTotal,
+                possessionAvg: avgPossession,
+                attackIntensity: attackIntensity
+            };
         }
 
         // Helper: opóźnienie
