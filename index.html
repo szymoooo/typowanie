@@ -367,7 +367,7 @@
                 
                 // Przetwórz mecze ze Sportmonks
                 await processFixtures(fixtures);
-                displayResults();
+                await displayResults();
             } catch (e) {
                 console.error('💥 BŁĄD:', e);
                 document.getElementById('info').textContent = 'Błąd: ' + e.message;
@@ -4018,16 +4018,189 @@
         // TotalCorner, BetOnCorners, CornerStat - web scraping niestabilny
         // Cloudflare blokuje, parsowanie HTML zawodne, 403/404 błędy
 
-        function displayResults() {
+        // ✅ Pobierz dane dla konkretnego meczu z FootyStats
+        async function getFootyStatsMatchData(matchId) {
+            try {
+                // Spróbuj różne endpointy według dokumentacji FootyStats
+                const endpoints = [
+                    `/match/${matchId}`,
+                    `/match/${matchId}/stats`,
+                    `/match-detail/${matchId}`,
+                    `/fixtures/${matchId}`,
+                    `/fixture/${matchId}`,
+                    `/matches/${matchId}`
+                ];
+                
+                for (const endpoint of endpoints) {
+                    try {
+                        const url = `${PROXY}https://api.football-data-api.com${endpoint}?key=${FOOTYSTATS_KEY}`;
+                        console.log(`    📡 Próbuję endpoint: ${endpoint}`);
+                        const res = await fetch(url);
+                        
+                        if (!res.ok) continue;
+                        
+                        const contentType = res.headers.get('content-type');
+                        if (!contentType || !contentType.includes('application/json')) {
+                            continue;
+                        }
+                        
+                        const data = await res.json();
+                        
+                        // Sprawdź czy odpowiedź zawiera dane meczu
+                        if (data.data || data.match || data.fixture) {
+                            console.log(`    ✅ Endpoint ${endpoint} działa!`);
+                            return data.data || data.match || data.fixture || data;
+                        }
+                    } catch (e) {
+                        continue;
+                    }
+                }
+                
+                return null;
+            } catch (e) {
+                console.error(`    ❌ Błąd pobierania danych meczu ${matchId} z FootyStats:`, e);
+                return null;
+            }
+        }
+        
+        // ✅ Pobierz statystyki dla konkretnego meczu z FootyStats
+        async function getFootyStatsMatchStats(matchId) {
+            try {
+                const matchData = await getFootyStatsMatchData(matchId);
+                if (!matchData) return null;
+                
+                // Parsuj dostępne statystyki z odpowiedzi
+                const stats = {
+                    corners: matchData.total_corners_count || 
+                             matchData.totalCorners ||
+                             matchData.corners_total ||
+                             (matchData.homeCorners && matchData.awayCorners ? matchData.homeCorners + matchData.awayCorners : null),
+                    homeCorners: matchData.homeCorners || matchData.home_corners,
+                    awayCorners: matchData.awayCorners || matchData.away_corners,
+                    possession: matchData.homePossession || matchData.home_possession,
+                    shots: matchData.total_shots || matchData.shots,
+                    attacks: matchData.attacks || matchData.dangerous_attacks
+                };
+                
+                return stats;
+            } catch (e) {
+                console.error(`    ❌ Błąd parsowania statystyk meczu ${matchId}:`, e);
+                return null;
+            }
+        }
+        
+        // ✅ Pobierz dane dla konkretnego meczu ze Sportmonks (rozszerzona wersja)
+        async function getSportmonksMatchData(fixtureId) {
+            try {
+                const url = `${PROXY}https://api.sportmonks.com/v3/football/fixtures/${fixtureId}?api_token=${SPORTMONKS_KEY}&include=statistics.type,participants`;
+                const res = await fetch(url);
+                
+                if (!res.ok) return null;
+                
+                const data = await res.json();
+                return data.data || null;
+            } catch (e) {
+                console.error(`    ❌ Błąd pobierania danych meczu ${fixtureId} ze Sportmonks:`, e);
+                return null;
+            }
+        }
+        
+        // ✅ Analiza danych dla meczu z displayResults (dla meczów które spełniają kryteria)
+        async function analyzeMatchForDisplay(match) {
+            try {
+                // Parsuj nazwy drużyn z meczu
+                const matchName = match.match || '';
+                const teams = matchName.split(' vs ');
+                if (teams.length !== 2) return null;
+                
+                const homeTeamName = teams[0].trim();
+                const awayTeamName = teams[1].trim();
+                
+                // Spróbuj pobrać analizę ze Sportmonks
+                let analysis = null;
+                
+                // Najpierw spróbuj przez analyzeSportmonksMatchData jeśli mamy ID meczu ze Sportmonks
+                // Ale tutaj mamy tylko ID z API-Football, więc musimy użyć nazw drużyn
+                const homeTeamId = await getSportmonksTeamId(homeTeamName);
+                const awayTeamId = await getSportmonksTeamId(awayTeamName);
+                
+                if (homeTeamId && awayTeamId) {
+                    const homeMatches = await getSportmonksTeamMatchesWithStats(homeTeamId, 5);
+                    const awayMatches = await getSportmonksTeamMatchesWithStats(awayTeamId, 5);
+                    
+                    const homeAnalysis = analyzeSportmonksTeamStats(homeMatches, homeTeamId);
+                    const awayAnalysis = analyzeSportmonksTeamStats(awayMatches, awayTeamId);
+                    
+                    analysis = {
+                        home: homeAnalysis,
+                        away: awayAnalysis
+                    };
+                }
+                
+                return analysis;
+            } catch (e) {
+                console.error(`    ❌ Błąd analizy meczu dla display:`, e);
+                return null;
+            }
+        }
+
+        async function displayResults() {
             const table = document.getElementById('predictions');
             table.style.display = 'table';
-            let html = `<tr><th>Mecz</th><th>Liga</th><th>Średnia %</th><th>ZGODNOŚĆ</th><th>Status</th></tr>`;
+            let html = `<tr><th>Mecz</th><th>Liga</th><th>Średnia %</th><th>ZGODNOŚĆ</th><th>Status</th><th>Analiza</th></tr>`;
 
             if (predictions.length === 0) {
-                html += `<tr><td colspan="5">Brak meczów spełniających kryteria (zgdn.≥30%, śr.≥55%).</td></tr>`;
+                html += `<tr><td colspan="6">Brak meczów spełniających kryteria (zgdn.≥30%, śr.≥55%).</td></tr>`;
             } else {
+                // Pobierz analizy dla wszystkich meczów równolegle (max 10 żeby nie przekroczyć limitu API)
+                const maxToAnalyze = Math.min(10, predictions.length);
+                const analysisPromises = predictions.slice(0, maxToAnalyze).map(p => 
+                    analyzeMatchForDisplay(p).catch(e => {
+                        console.warn(`⚠️ Błąd analizy meczu ${p.id}:`, e);
+                        return null;
+                    })
+                );
+                
+                console.log(`📊 Pobieranie analizy dla ${maxToAnalyze} meczów...`);
+                const analyses = await Promise.all(analysisPromises);
+                const analysisMap = new Map();
+                analyses.forEach((analysis, index) => {
+                    if (analysis && predictions[index]) {
+                        analysisMap.set(predictions[index].id, analysis);
+                    }
+                });
+                
                 predictions.forEach(p => {
                     const cls = p.agree >= 80 ? 'high' : p.agree >= 70 ? 'medium' : '';
+                    
+                    // Pobierz analizę dla tego meczu
+                    const analysis = analysisMap.get(p.id);
+                    let analysisHtml = '<span style="color:#888; font-size: 11px;">Brak danych</span>';
+                    
+                    if (analysis) {
+                        const teams = p.match.split(' vs ');
+                        const homeName = teams[0]?.trim() || 'Unknown';
+                        const awayName = teams[1]?.trim() || 'Unknown';
+                        
+                        analysisHtml = `
+                            <div style="font-size: 10px; line-height: 1.3; max-width: 300px;">
+                                <strong style="color:#4a9eff;">🏠 ${homeName}:</strong><br>
+                                📊 Ostatnie 5: ${analysis.home.cornersOwn || '-'} rożnych<br>
+                                📈 Śr. rożnych: ${analysis.home.cornersAvg || '-'}<br>
+                                ⚽ Śr. łącznie: ${analysis.home.cornersTotalAvg || '-'}<br>
+                                🎯 Posiadanie: ${analysis.home.possessionAvg || '-'}%<br>
+                                🔥 Intensywność: ${analysis.home.attackIntensity || '-'}<br>
+                                <br>
+                                <strong style="color:#ff6b6b;">✈️ ${awayName}:</strong><br>
+                                📊 Ostatnie 5: ${analysis.away.cornersOwn || '-'} rożnych<br>
+                                📈 Śr. rożnych: ${analysis.away.cornersAvg || '-'}<br>
+                                ⚽ Śr. łącznie: ${analysis.away.cornersTotalAvg || '-'}<br>
+                                🎯 Posiadanie: ${analysis.away.possessionAvg || '-'}%<br>
+                                🔥 Intensywność: ${analysis.away.attackIntensity || '-'}
+                            </div>
+                        `;
+                    }
+                    
                     html += `<tr>
                         <td><strong>${p.match}</strong><br>
                             <span class="expand-btn" data-match-id="${p.id}">📊 Pokaż historię rożnych</span>
@@ -4036,6 +4209,7 @@
                         <td>${p.avgProb}%</td>
                         <td class="${cls}">${p.agree}%</td>
                         <td class="pending" id="s-${p.id}">${p.status}</td>
+                        <td style="text-align: left;">${analysisHtml}</td>
                     </tr>`;
                 });
             }
