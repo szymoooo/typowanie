@@ -3158,29 +3158,49 @@
                             }
                         }
                         
-                        // UWAGA: FootyStats nie ma endpointu /team-matches - analiza ograniczona
-                        // Możemy wyświetlić tylko podstawowe informacje z dostępnych danych
-                        let analysisHtml = '<span style="color:#888; font-size: 11px;">Analiza niedostępna<br>(FootyStats nie ma endpointu /team-matches)</span>';
+                        // ✅ DANE SĄ JUŻ W ODPOWIEDZI /todays-matches!
+                        // FootyStats API nie ma endpointów dla pojedynczych meczów (wszystkie zwracają 404),
+                        // ale dane są dostępne bezpośrednio w odpowiedzi /todays-matches
+                        let analysisHtml = '<span style="color:#888; font-size: 11px;">Brak danych</span>';
                         
-                        // Jeśli mecz ma już jakieś statystyki w odpowiedzi, możemy je wyświetlić
-                        if (match.total_corners_count !== undefined || match.homeCorners !== undefined) {
-                            const totalCorners = match.total_corners_count || 
-                                                 (match.homeCorners && match.awayCorners ? match.homeCorners + match.awayCorners : null) ||
-                                                 (match.home_corners && match.away_corners ? match.home_corners + match.away_corners : null) ||
-                                                 '-';
-                            
+                        // Użyj danych z odpowiedzi (pola: team_a_corners, team_b_corners, totalCornerCount, team_a_possession, team_b_possession)
+                        const homeCorners = match.team_a_corners !== undefined ? match.team_a_corners : 
+                                           match.homeCorners !== undefined ? match.homeCorners : 
+                                           match.home_corners !== undefined ? match.home_corners : null;
+                        const awayCorners = match.team_b_corners !== undefined ? match.team_b_corners : 
+                                           match.awayCorners !== undefined ? match.awayCorners : 
+                                           match.away_corners !== undefined ? match.away_corners : null;
+                        const totalCorners = match.totalCornerCount !== undefined ? match.totalCornerCount :
+                                            match.total_corners_count !== undefined ? match.total_corners_count :
+                                            (homeCorners !== null && awayCorners !== null ? homeCorners + awayCorners : null);
+                        const homePossession = match.team_a_possession !== undefined ? match.team_a_possession : null;
+                        const awayPossession = match.team_b_possession !== undefined ? match.team_b_possession : null;
+                        const homeShotsOnTarget = match.team_a_shotsOnTarget !== undefined ? match.team_a_shotsOnTarget : null;
+                        const awayShotsOnTarget = match.team_b_shotsOnTarget !== undefined ? match.team_b_shotsOnTarget : null;
+                        const homeShots = match.team_a_shots !== undefined ? match.team_a_shots : null;
+                        const awayShots = match.team_b_shots !== undefined ? match.team_b_shots : null;
+                        
+                        if (homeCorners !== null || awayCorners !== null || totalCorners !== null || homePossession !== null) {
                             analysisHtml = `
                                 <div style="font-size: 10px; line-height: 1.3; max-width: 300px;">
                                     <strong style="color:#4a9eff;">🏠 ${homeName}:</strong><br>
-                                    📊 Różne: ${match.homeCorners || match.home_corners || '-'}<br>
+                                    ${homeCorners !== null ? `📊 Rożne: ${homeCorners}<br>` : ''}
+                                    ${homePossession !== null ? `🎯 Posiadanie: ${homePossession}%<br>` : ''}
+                                    ${homeShotsOnTarget !== null ? `⚽ Strzały na bramkę: ${homeShotsOnTarget}<br>` : ''}
+                                    ${homeShots !== null ? `⚽ Strzały łącznie: ${homeShots}<br>` : ''}
                                     <br>
                                     <strong style="color:#ff6b6b;">✈️ ${awayName}:</strong><br>
-                                    📊 Różne: ${match.awayCorners || match.away_corners || '-'}<br>
+                                    ${awayCorners !== null ? `📊 Rożne: ${awayCorners}<br>` : ''}
+                                    ${awayPossession !== null ? `🎯 Posiadanie: ${awayPossession}%<br>` : ''}
+                                    ${awayShotsOnTarget !== null ? `⚽ Strzały na bramkę: ${awayShotsOnTarget}<br>` : ''}
+                                    ${awayShots !== null ? `⚽ Strzały łącznie: ${awayShots}<br>` : ''}
+                                    ${totalCorners !== null ? `<br>⚽ Łącznie: ${totalCorners} rożnych` : ''}
                                     <br>
-                                    ⚽ Łącznie: ${totalCorners} rożnych<br>
-                                    <small style="color:#888;">Analiza ostatnich 5 meczów niedostępna<br>(endpoint /team-matches nie istnieje)</small>
+                                    <small style="color:#888;">📌 Dane z meczu (analiza ostatnich 5 meczów niedostępna - FootyStats nie ma endpointu)</small>
                                 </div>
                             `;
+                        } else {
+                            analysisHtml = `<span style="color:#888; font-size: 11px;">Brak danych statystycznych<br>(mecz jeszcze się nie rozpoczął)</span>`;
                         }
                         
                         html += `<tr>
@@ -4177,15 +4197,18 @@
             }
             
             console.log(`📊 PODSUMOWANIE TESTÓW ENDPOINTÓW:`);
-            results.forEach(r => {
-                if (r.success) {
+            const workingEndpoints = results.filter(r => r.success);
+            if (workingEndpoints.length === 0) {
+                console.log(`⚠️ Wszystkie endpointy zwróciły 404 - FootyStats nie ma endpointów dla pojedynczych meczów`);
+                console.log(`✅ ALE: Dane są dostępne bezpośrednio w odpowiedzi /todays-matches!`);
+                console.log(`   Używamy pól: team_a_corners, team_b_corners, totalCornerCount, team_a_possession, team_b_possession`);
+            } else {
+                workingEndpoints.forEach(r => {
                     console.log(`✅ ${r.endpoint} - DZIAŁA!`);
                     console.log(`   Klucze danych:`, r.dataKeys);
                     console.log(`   Przykładowe dane:`, r.sampleData);
-                } else {
-                    console.log(`❌ ${r.endpoint} - Status: ${r.status}`);
-                }
-            });
+                });
+            }
             
             return results;
         }
