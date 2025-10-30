@@ -165,13 +165,49 @@
                 matches = data.response;
                 console.log(`✅ Pobrano ${matches.length} meczów`);
                 
+                // DEBUG: Sprawdź strukturę pierwszego meczu
+                if (matches.length > 0) {
+                    console.log('📊 STRUKTURA PIERWSZEGO MECZU:', matches[0]);
+                    console.log('📊 ID drużyn:', {
+                        homeId: matches[0].teams?.home?.id,
+                        homeName: matches[0].teams?.home?.name,
+                        awayId: matches[0].teams?.away?.id,
+                        awayName: matches[0].teams?.away?.name,
+                        leagueName: matches[0].league?.name,
+                        fixtureDate: matches[0].fixture?.date,
+                        fixtureTimestamp: matches[0].fixture?.timestamp
+                    });
+                    
+                    // Sprawdź czy są mecze z wczoraj (filtrowanie daty)
+                    const todayStart = new Date(today + 'T00:00:00Z').getTime();
+                    const todayEnd = todayStart + 86400000; // +24h
+                    const matchesFromToday = matches.filter(m => {
+                        const matchDate = m.fixture?.timestamp ? new Date(m.fixture.timestamp * 1000) : null;
+                        return matchDate && matchDate.getTime() >= todayStart && matchDate.getTime() < todayEnd;
+                    });
+                    console.log(`📅 Mecze z dzisiaj (${today}): ${matchesFromToday.length}/${matches.length}`);
+                    if (matches.length !== matchesFromToday.length) {
+                        console.warn(`⚠️ UWAGA: ${matches.length - matchesFromToday.length} meczów NIE jest z dzisiaj!`);
+                    }
+                }
+                
+                // Filtruj tylko mecze z dzisiaj
+                const todayStart = new Date(today + 'T00:00:00Z').getTime();
+                const todayEnd = todayStart + 86400000;
+                const todayMatches = matches.filter(m => {
+                    const matchDate = m.fixture?.timestamp ? new Date(m.fixture.timestamp * 1000) : null;
+                    return matchDate && matchDate.getTime() >= todayStart && matchDate.getTime() < todayEnd;
+                });
+                
+                console.log(`📅 Po filtrowaniu: ${todayMatches.length} meczów z dzisiaj (z ${matches.length} pobranych)`);
+                
                 // Pobierz historię dla każdego meczu
-                info.innerHTML = `✅ Pobrano <strong>${matches.length} meczów</strong>. Pobieranie historii drużyn...`;
-                await analyzeAllMatches(matches);
+                info.innerHTML = `✅ Pobrano <strong>${todayMatches.length} meczów z dzisiaj</strong>. Pobieranie historii drużyn...`;
+                await analyzeAllMatches(todayMatches);
                 
-                displayMatches(matches);
+                displayMatches(todayMatches);
                 
-                info.innerHTML = `✅ Pobrano <strong>${matches.length} meczów</strong> z historią drużyn (${today})`;
+                info.innerHTML = `✅ Pobrano <strong>${todayMatches.length} meczów z dzisiaj</strong> z historią drużyn (${today})`;
                 
             } catch (error) {
                 console.error('❌ Błąd:', error);
@@ -190,6 +226,8 @@
             try {
                 const url = `${API_FOOTBALL_BASE_URL}/fixtures?team=${teamId}&last=${limit}`;
                 
+                console.log(`   🔍 Pobieram historię dla drużyny ID=${teamId}, URL: ${url}`);
+                
                 const response = await fetch(url, {
                     headers: {
                         'x-apisports-key': API_FOOTBALL_KEY
@@ -201,14 +239,20 @@
                         throw new Error('LIMIT_ZAPYTAN');
                     }
                     console.warn(`⚠️ Błąd pobierania historii drużyny ${teamId}: HTTP ${response.status}`);
+                    const errorText = await response.text();
+                    console.warn(`   Odpowiedź błędu:`, errorText.substring(0, 200));
                     return [];
                 }
                 
                 const data = await response.json();
+                console.log(`   📦 Odpowiedź historii dla drużyny ${teamId}:`, data);
+                
                 if (!data.response || !Array.isArray(data.response)) {
+                    console.warn(`   ⚠️ Brak danych.response dla drużyny ${teamId}`);
                     return [];
                 }
                 
+                console.log(`   ✅ Pobrano ${data.response.length} meczów z historii dla drużyny ${teamId}`);
                 return data.response;
             } catch (error) {
                 if (error.message === 'LIMIT_ZAPYTAN') {
@@ -293,21 +337,39 @@
                 
                 for (const match of lastMatches) {
                     const fixtureId = match.fixture?.id;
-                    if (!fixtureId) continue;
+                    if (!fixtureId) {
+                        console.warn(`   ⚠️ Mecz bez ID:`, match);
+                        continue;
+                    }
                     
                     // Sprawdź czy mecz się zakończył
                     const status = match.fixture?.status?.short;
-                    if (status !== 'FT') continue; // Tylko zakończone mecze
+                    console.log(`   📅 Mecz ${fixtureId}: status=${status}`);
+                    
+                    if (status !== 'FT') {
+                        console.log(`   ⏭️ Pomijam mecz ${fixtureId} - status ${status} (nie FT)`);
+                        continue; // Tylko zakończone mecze
+                    }
                     
                     // Sprawdź czy nasza drużyna grała jako home czy away w tym meczu
                     const matchHomeId = match.teams?.home?.id;
                     const matchAwayId = match.teams?.away?.id;
                     const playedAsHome = matchHomeId === teamId;
                     
-                    if (!playedAsHome && matchAwayId !== teamId) continue; // Nasza drużyna nie grała w tym meczu
+                    console.log(`   🏠 Mecz ${fixtureId}: homeId=${matchHomeId}, awayId=${matchAwayId}, nasza drużyna=${teamId}, grała jako home=${playedAsHome}`);
+                    
+                    if (!playedAsHome && matchAwayId !== teamId) {
+                        console.warn(`   ⚠️ Nasza drużyna ${teamId} nie grała w meczu ${fixtureId}`);
+                        continue; // Nasza drużyna nie grała w tym meczu
+                    }
                     
                     const stats = await getMatchStatistics(fixtureId);
-                    if (!stats) continue;
+                    if (!stats) {
+                        console.warn(`   ⚠️ Brak statystyk dla meczu ${fixtureId}`);
+                        continue;
+                    }
+                    
+                    console.log(`   ✅ Statystyki dla meczu ${fixtureId}: homeCorners=${stats.homeCorners}, awayCorners=${stats.awayCorners}, total=${stats.totalCorners}`);
                     
                     // Zapisz rożne dla naszej drużyny i łącznie
                     const ownCorners = playedAsHome ? stats.homeCorners : stats.awayCorners;
@@ -358,6 +420,22 @@
         async function analyzeAllMatches(matchesList) {
             const maxMatches = Math.min(10, matchesList.length); // Limit do 10 meczów żeby nie przekroczyć limitu zapytań
             
+            // DEBUG: Szukaj konkretnego meczu "Grasshoppers vs BSC Young Boys"
+            const testMatch = matchesList.find(m => {
+                const home = m.teams?.home?.name || '';
+                const away = m.teams?.away?.name || '';
+                return (home.includes('Grasshoppers') && away.includes('Young Boys')) ||
+                       (home.includes('Young Boys') && away.includes('Grasshoppers'));
+            });
+            
+            if (testMatch) {
+                console.log('🔍 ZNALEZIONO MECZ TESTOWY:', testMatch);
+                console.log('   Home ID:', testMatch.teams?.home?.id);
+                console.log('   Away ID:', testMatch.teams?.away?.id);
+                console.log('   Liga:', testMatch.league?.name);
+                console.log('   Data:', testMatch.fixture?.date);
+            }
+            
             for (let i = 0; i < maxMatches; i++) {
                 const match = matchesList[i];
                 const homeTeamId = match.teams?.home?.id;
@@ -366,11 +444,12 @@
                 const awayTeamName = match.teams?.away?.name || 'Unknown';
                 
                 if (!homeTeamId || !awayTeamId) {
-                    console.warn(`⚠️ Brak ID drużyn w meczu ${i + 1}`);
+                    console.warn(`⚠️ Brak ID drużyn w meczu ${i + 1}: ${homeTeamName} vs ${awayTeamName}`);
                     continue;
                 }
                 
                 console.log(`📊 Analizuję mecz ${i + 1}/${maxMatches}: ${homeTeamName} vs ${awayTeamName}`);
+                console.log(`   Home ID: ${homeTeamId}, Away ID: ${awayTeamId}`);
                 
                 try {
                     // Pobierz historię dla obu drużyn równolegle
