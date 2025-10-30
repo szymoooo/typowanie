@@ -3163,22 +3163,57 @@
                         // ale dane są dostępne bezpośrednio w odpowiedzi /todays-matches
                         let analysisHtml = '<span style="color:#888; font-size: 11px;">Brak danych</span>';
                         
+                        // DEBUG: Sprawdź jakie pola są dostępne dla tego meczu
+                        if (matchNumber === 1) {
+                            console.log(`🔍 DEBUG MECZ ${matchNumber} - Dostępne pola statystyczne:`, {
+                                team_a_corners: match.team_a_corners,
+                                team_b_corners: match.team_b_corners,
+                                totalCornerCount: match.totalCornerCount,
+                                team_a_possession: match.team_a_possession,
+                                team_b_possession: match.team_b_possession,
+                                team_a_shotsOnTarget: match.team_a_shotsOnTarget,
+                                team_b_shotsOnTarget: match.team_b_shotsOnTarget,
+                                team_a_shots: match.team_a_shots,
+                                team_b_shots: match.team_b_shots,
+                                homeCorners: match.homeCorners,
+                                awayCorners: match.awayCorners,
+                                home_corners: match.home_corners,
+                                away_corners: match.away_corners
+                            });
+                        }
+                        
                         // Użyj danych z odpowiedzi (pola: team_a_corners, team_b_corners, totalCornerCount, team_a_possession, team_b_possession)
-                        const homeCorners = match.team_a_corners !== undefined ? match.team_a_corners : 
-                                           match.homeCorners !== undefined ? match.homeCorners : 
-                                           match.home_corners !== undefined ? match.home_corners : null;
-                        const awayCorners = match.team_b_corners !== undefined ? match.team_b_corners : 
-                                           match.awayCorners !== undefined ? match.awayCorners : 
-                                           match.away_corners !== undefined ? match.away_corners : null;
-                        const totalCorners = match.totalCornerCount !== undefined ? match.totalCornerCount :
-                                            match.total_corners_count !== undefined ? match.total_corners_count :
-                                            (homeCorners !== null && awayCorners !== null ? homeCorners + awayCorners : null);
-                        const homePossession = match.team_a_possession !== undefined ? match.team_a_possession : null;
-                        const awayPossession = match.team_b_possession !== undefined ? match.team_b_possession : null;
-                        const homeShotsOnTarget = match.team_a_shotsOnTarget !== undefined ? match.team_a_shotsOnTarget : null;
-                        const awayShotsOnTarget = match.team_b_shotsOnTarget !== undefined ? match.team_b_shotsOnTarget : null;
-                        const homeShots = match.team_a_shots !== undefined ? match.team_a_shots : null;
-                        const awayShots = match.team_b_shots !== undefined ? match.team_b_shots : null;
+                        // WAŻNE: Sprawdzamy czy wartość jest różna od undefined i różna od null, ale też czy nie jest 0 lub pustą wartością
+                        const homeCorners = (match.team_a_corners !== undefined && match.team_a_corners !== null) ? match.team_a_corners : 
+                                           (match.homeCorners !== undefined && match.homeCorners !== null) ? match.homeCorners : 
+                                           (match.home_corners !== undefined && match.home_corners !== null) ? match.home_corners : null;
+                        const awayCorners = (match.team_b_corners !== undefined && match.team_b_corners !== null) ? match.team_b_corners : 
+                                           (match.awayCorners !== undefined && match.awayCorners !== null) ? match.awayCorners : 
+                                           (match.away_corners !== undefined && match.away_corners !== null) ? match.away_corners : null;
+                        const totalCorners = (match.totalCornerCount !== undefined && match.totalCornerCount !== null) ? match.totalCornerCount :
+                                            (match.total_corners_count !== undefined && match.total_corners_count !== null) ? match.total_corners_count :
+                                            ((homeCorners !== null && awayCorners !== null) ? homeCorners + awayCorners : null);
+                        const homePossession = (match.team_a_possession !== undefined && match.team_a_possession !== null) ? match.team_a_possession : null;
+                        const awayPossession = (match.team_b_possession !== undefined && match.team_b_possession !== null) ? match.team_b_possession : null;
+                        const homeShotsOnTarget = (match.team_a_shotsOnTarget !== undefined && match.team_a_shotsOnTarget !== null) ? match.team_a_shotsOnTarget : null;
+                        const awayShotsOnTarget = (match.team_b_shotsOnTarget !== undefined && match.team_b_shotsOnTarget !== null) ? match.team_b_shotsOnTarget : null;
+                        const homeShots = (match.team_a_shots !== undefined && match.team_a_shots !== null) ? match.team_a_shots : null;
+                        const awayShots = (match.team_b_shots !== undefined && match.team_b_shots !== null) ? match.team_b_shots : null;
+                        
+                        // DEBUG: Sprawdź jakie wartości zostały wyodrębnione
+                        if (matchNumber === 1) {
+                            console.log(`🔍 DEBUG MECZ ${matchNumber} - Wyodrębnione wartości:`, {
+                                homeCorners,
+                                awayCorners,
+                                totalCorners,
+                                homePossession,
+                                awayPossession,
+                                homeShotsOnTarget,
+                                awayShotsOnTarget,
+                                homeShots,
+                                awayShots
+                            });
+                        }
                         
                         if (homeCorners !== null || awayCorners !== null || totalCorners !== null || homePossession !== null) {
                             analysisHtml = `
