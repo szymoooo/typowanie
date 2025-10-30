@@ -4099,36 +4099,46 @@
                     `/match/${matchId}`,
                     `/match/${matchId}/stats`,
                     `/match-detail/${matchId}`,
+                    `/match-details/${matchId}`,
+                    `/matches/${matchId}`,
                     `/fixtures/${matchId}`,
                     `/fixture/${matchId}`,
-                    `/matches/${matchId}`
+                    `/match-statistics/${matchId}`,
+                    `/match-stats/${matchId}`
                 ];
                 
                 for (const endpoint of endpoints) {
                     try {
                         const url = `${PROXY}https://api.football-data-api.com${endpoint}?key=${FOOTYSTATS_KEY}`;
-                        console.log(`    📡 Próbuję endpoint: ${endpoint}`);
+                        console.log(`    📡 FootyStats - Próbuję endpoint: ${endpoint}`);
                         const res = await fetch(url);
                         
-                        if (!res.ok) continue;
+                        if (!res.ok) {
+                            console.log(`    ⚠️ ${endpoint} - Status: ${res.status}`);
+                            continue;
+                        }
                         
                         const contentType = res.headers.get('content-type');
                         if (!contentType || !contentType.includes('application/json')) {
+                            console.log(`    ⚠️ ${endpoint} - Nie jest JSON (${contentType})`);
                             continue;
                         }
                         
                         const data = await res.json();
+                        console.log(`    📦 ${endpoint} - Odpowiedź:`, Object.keys(data));
                         
                         // Sprawdź czy odpowiedź zawiera dane meczu
-                        if (data.data || data.match || data.fixture) {
-                            console.log(`    ✅ Endpoint ${endpoint} działa!`);
+                        if (data.data || data.match || data.fixture || (data.id && data.home_name)) {
+                            console.log(`    ✅ Endpoint ${endpoint} DZIAŁA! Znaleziono dane meczu`);
                             return data.data || data.match || data.fixture || data;
                         }
                     } catch (e) {
+                        console.log(`    ❌ ${endpoint} - Błąd:`, e.message);
                         continue;
                     }
                 }
                 
+                console.warn(`    ⚠️ Żaden endpoint nie działa dla meczu ${matchId}`);
                 return null;
             } catch (e) {
                 console.error(`    ❌ Błąd pobierania danych meczu ${matchId} z FootyStats:`, e);
