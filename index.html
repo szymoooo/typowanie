@@ -4018,6 +4018,79 @@
         // TotalCorner, BetOnCorners, CornerStat - web scraping niestabilny
         // Cloudflare blokuje, parsowanie HTML zawodne, 403/404 błędy
 
+        // ✅ TEST: Sprawdź dostępne endpointy FootyStats dla konkretnego meczu
+        async function testFootyStatsEndpoints(matchId) {
+            console.log(`🔍 TEST: Sprawdzam endpointy FootyStats dla meczu ${matchId}`);
+            
+            // Lista możliwych endpointów do sprawdzenia
+            const endpoints = [
+                `/match/${matchId}`,
+                `/match/${matchId}/stats`,
+                `/match-detail/${matchId}`,
+                `/match-details/${matchId}`,
+                `/matches/${matchId}`,
+                `/fixtures/${matchId}`,
+                `/fixture/${matchId}`,
+                `/match-statistics/${matchId}`,
+                `/match-stats/${matchId}`,
+                `/match-history/${matchId}`
+            ];
+            
+            const results = [];
+            
+            for (const endpoint of endpoints) {
+                try {
+                    const url = `${PROXY}https://api.football-data-api.com${endpoint}?key=${FOOTYSTATS_KEY}`;
+                    console.log(`    📡 Testuję: ${endpoint}`);
+                    
+                    const res = await fetch(url);
+                    const contentType = res.headers.get('content-type') || '';
+                    
+                    if (res.ok && contentType.includes('application/json')) {
+                        const data = await res.json();
+                        console.log(`    ✅ ${endpoint} - Status: ${res.status} | Zawiera dane:`, Object.keys(data).length > 0);
+                        results.push({
+                            endpoint: endpoint,
+                            status: res.status,
+                            success: true,
+                            dataKeys: Object.keys(data),
+                            sampleData: JSON.stringify(data).substring(0, 200)
+                        });
+                    } else {
+                        console.log(`    ❌ ${endpoint} - Status: ${res.status} | Content-Type: ${contentType}`);
+                        results.push({
+                            endpoint: endpoint,
+                            status: res.status,
+                            success: false
+                        });
+                    }
+                } catch (e) {
+                    console.log(`    ❌ ${endpoint} - Błąd:`, e.message);
+                    results.push({
+                        endpoint: endpoint,
+                        status: 'ERROR',
+                        error: e.message
+                    });
+                }
+                
+                // Małe opóźnienie między zapytaniami
+                await delay(200);
+            }
+            
+            console.log(`📊 PODSUMOWANIE TESTÓW ENDPOINTÓW:`);
+            results.forEach(r => {
+                if (r.success) {
+                    console.log(`✅ ${r.endpoint} - DZIAŁA!`);
+                    console.log(`   Klucze danych:`, r.dataKeys);
+                    console.log(`   Przykładowe dane:`, r.sampleData);
+                } else {
+                    console.log(`❌ ${r.endpoint} - Status: ${r.status}`);
+                }
+            });
+            
+            return results;
+        }
+        
         // ✅ Pobierz dane dla konkretnego meczu z FootyStats
         async function getFootyStatsMatchData(matchId) {
             try {
