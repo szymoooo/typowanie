@@ -1524,15 +1524,10 @@
                                     <h3 style="color: #EF0107; margin-bottom: 10px;">📜 Historia analizowanych meczów</h3>
                                     <p style="color: #FFFFFF;">Łącznie: ${history.length} meczów w ${sortedDates.length} ${sortedDates.length === 1 ? 'dniu' : 'dniach'}</p>
                                 </div>
-                                <button onclick="verifyHistoryResults()" style="
-                                    background: #023474;
-                                    color: white;
-                                    border: none;
-                                    padding: 10px 20px;
-                                    border-radius: 5px;
-                                    cursor: pointer;
-                                    font-size: 14px;
-                                    font-weight: bold;
+                                <button onclick="verifyHistoryResults()" class="btn btn-secondary" style="
+                                    padding: 12px 24px;
+                                    font-size: 16px;
+                                    white-space: nowrap;
                                 ">🔄 Weryfikuj Wyniki</button>
                             </div>
                         </div>
@@ -1573,28 +1568,30 @@
                             const matchId = `history_${dateStr.replace(/\s+/g, '_')}_${matchIdx}`;
                             window[matchId] = match; // Zapisz match w globalnym scope
                             
+                            // Wyświetl rożne - jeśli mecz oczekuje, pokaż klepsydrę zamiast -1
+                            let cornersDisplay = actualCorners;
+                            if (status === 'pending' && (actualCorners === '-' || actualCorners === -1 || actualCorners === null || actualCorners === undefined)) {
+                                cornersDisplay = '⏳';
+                            }
+                            
                             html += `
                                 <div class="match-item" style="border-left-color: ${statusColor};">
-                                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                                    <div style="display: flex; justify-content: space-between; align-items: center; gap: 15px;">
                                         <div style="flex: 1;">
                                             <div class="match-teams">${homeName} vs ${awayName}</div>
                                             <div class="match-league">${league}</div>
                                             <div style="margin-top: 10px;">
                                                 ${statusBadge}
                                                 <span style="color: #FFFFFF; margin-left: 10px;">
-                                                    Rzutów rożnych: <strong>${actualCorners}</strong> | Score: <strong>${score}/7</strong>
+                                                    Rzutów rożnych: <strong>${cornersDisplay}</strong> | Score: <strong>${score}/7</strong>
                                                 </span>
                                             </div>
                                         </div>
-                                        <button onclick="showMatchHistoryDetails(window['${matchId}'])" style="
-                                            background: #023474;
-                                            color: white;
-                                            border: none;
-                                            padding: 8px 16px;
-                                            border-radius: 5px;
-                                            cursor: pointer;
-                                            font-size: 12px;
-                                            margin-left: 15px;
+                                        <button onclick="showMatchHistoryDetails(window['${matchId}'])" class="btn btn-secondary" style="
+                                            padding: 12px 24px;
+                                            font-size: 14px;
+                                            white-space: nowrap;
+                                            min-width: 120px;
                                         ">🔍 Szczegóły</button>
                                     </div>
                                 </div>
@@ -1631,8 +1628,11 @@
             const homeName = match.home_name || matchData.home_name || 'N/A';
             const awayName = match.away_name || matchData.away_name || 'N/A';
             const league = match.league || match.league_name || 'N/A';
-            const status = match.result || 'pending';
-            const actualCorners = match.actual_corners || '-';
+            const status = match.result || match.status || 'pending';
+            let actualCorners = match.actual_corners || matchData.totalCornerCount;
+            if (status === 'pending' && (actualCorners === '-' || actualCorners === -1 || actualCorners === null || actualCorners === undefined)) {
+                actualCorners = '⏳';
+            }
             const score = match.score || match.analysis?.score || 0;
             const categories = match.categories || match.analysis?.categories || [];
             const percentSum = match.percent_sum || match.analysis?.percent_sum || 0;
