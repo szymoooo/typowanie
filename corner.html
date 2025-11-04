@@ -1,0 +1,1778 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Corner Predictor - Over 9.5 Analiza</title>
+    <style>
+        /* Kolory Arsenal: czerwony #EF0107, biały #FFFFFF, granatowy #023474 */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            color: #ffffff;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        /* Header */
+        header {
+            background: linear-gradient(135deg, #EF0107 0%, #cc0000 100%);
+            padding: 30px 20px;
+            border-radius: 15px;
+            margin-bottom: 30px;
+            box-shadow: 0 8px 20px rgba(239, 1, 7, 0.3);
+            text-align: center;
+        }
+
+        header h1 {
+            font-size: 2.5em;
+            color: #FFFFFF;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+            margin-bottom: 10px;
+        }
+
+        header .subtitle {
+            color: #FFFFFF;
+            font-size: 1.1em;
+            opacity: 0.95;
+        }
+
+        /* Buttons */
+        .button-group {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .btn {
+            padding: 15px 30px;
+            font-size: 16px;
+            font-weight: bold;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+        }
+
+        .btn-primary {
+            background: #EF0107;
+            color: #FFFFFF;
+        }
+
+        .btn-primary:hover {
+            background: #cc0000;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 15px rgba(239, 1, 7, 0.4);
+        }
+
+        .btn-secondary {
+            background: #023474;
+            color: #FFFFFF;
+        }
+
+        .btn-secondary:hover {
+            background: #011f4a;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 15px rgba(2, 52, 116, 0.4);
+        }
+
+        .btn-white {
+            background: #FFFFFF;
+            color: #EF0107;
+        }
+
+        .btn-white:hover {
+            background: #f5f5f5;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 15px rgba(255, 255, 255, 0.3);
+        }
+
+        /* Cards */
+        .card {
+            background: rgba(255, 255, 255, 0.05);
+            border: 2px solid rgba(239, 1, 7, 0.3);
+            border-radius: 15px;
+            padding: 25px;
+            margin-bottom: 20px;
+            backdrop-filter: blur(10px);
+        }
+
+        .card-header {
+            background: linear-gradient(135deg, #EF0107 0%, #cc0000 100%);
+            color: #FFFFFF;
+            padding: 15px 20px;
+            border-radius: 10px;
+            margin: -25px -25px 20px -25px;
+            font-size: 1.3em;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .card-header.blue {
+            background: linear-gradient(135deg, #023474 0%, #011f4a 100%);
+        }
+
+        /* Match List */
+        .match-item {
+            background: rgba(255, 255, 255, 0.03);
+            border-left: 4px solid #EF0107;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-radius: 8px;
+            transition: all 0.3s;
+        }
+
+        .match-item:hover {
+            background: rgba(255, 255, 255, 0.08);
+            border-left-color: #023474;
+            transform: translateX(5px);
+        }
+
+        .match-time {
+            color: #FFFFFF;
+            font-weight: bold;
+            display: inline-block;
+            width: 70px;
+        }
+
+        .match-teams {
+            color: #FFFFFF;
+            font-size: 1.1em;
+            margin: 5px 0;
+        }
+
+        .match-league {
+            color: #EF0107;
+            font-size: 0.9em;
+            font-weight: bold;
+            margin-top: 5px;
+        }
+
+        /* Stats */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: rgba(255, 255, 255, 0.05);
+            border: 2px solid rgba(2, 52, 116, 0.5);
+            border-radius: 10px;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 2.5em;
+            font-weight: bold;
+            color: #EF0107;
+            margin: 10px 0;
+        }
+
+        .stat-label {
+            color: #FFFFFF;
+            font-size: 0.9em;
+            opacity: 0.8;
+        }
+
+        /* Loading */
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 40px;
+            color: #EF0107;
+            font-size: 1.2em;
+        }
+
+        .spinner {
+            border: 4px solid rgba(255, 255, 255, 0.1);
+            border-top: 4px solid #EF0107;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateX(400px);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        @keyframes slideOut {
+            from {
+                transform: translateX(0);
+                opacity: 1;
+            }
+            to {
+                transform: translateX(400px);
+                opacity: 0;
+            }
+        }
+
+        @keyframes pulse {
+            0%, 100% {
+                box-shadow: 0 0 0 0 rgba(239, 1, 7, 0.7);
+            }
+            50% {
+                box-shadow: 0 0 0 10px rgba(239, 1, 7, 0);
+            }
+        }
+
+        /* League Section - Two Column Layout */
+        #matches-container {
+            margin-top: 20px;
+        }
+
+        .league-section {
+            margin-bottom: 0;
+            break-inside: avoid;
+        }
+
+        .league-title {
+            background: linear-gradient(135deg, #EF0107 0%, #cc0000 100%);
+            color: #FFFFFF;
+            padding: 12px 20px;
+            border-radius: 8px;
+            font-size: 1.2em;
+            font-weight: bold;
+            margin-bottom: 15px;
+        }
+
+        /* Responsive - jedna kolumna na małych ekranach */
+        @media (max-width: 768px) {
+            #matches-container {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* Analysis Window */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(5px);
+        }
+
+        .modal-content {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            margin: 50px auto;
+            padding: 30px;
+            border: 3px solid #EF0107;
+            border-radius: 15px;
+            width: 90%;
+            max-width: 1200px;
+            max-height: 90vh;
+            overflow-y: auto;
+            box-shadow: 0 10px 40px rgba(239, 1, 7, 0.5);
+        }
+
+        .close {
+            color: #FFFFFF;
+            float: right;
+            font-size: 32px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: color 0.3s;
+        }
+
+        .close:hover {
+            color: #EF0107;
+        }
+
+        /* Table */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+
+        th {
+            background: #023474;
+            color: #FFFFFF;
+            padding: 15px;
+            text-align: left;
+            border-bottom: 3px solid #EF0107;
+        }
+
+        td {
+            padding: 12px 15px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        tr:hover {
+            background: rgba(239, 1, 7, 0.1);
+        }
+
+        /* Badge */
+        .badge {
+            display: inline-block;
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 0.85em;
+            font-weight: bold;
+        }
+
+        .badge-success {
+            background: #4CAF50;
+            color: #FFFFFF;
+        }
+
+        .badge-danger {
+            background: #EF0107;
+            color: #FFFFFF;
+        }
+
+        .badge-warning {
+            background: #FF9800;
+            color: #FFFFFF;
+        }
+
+        /* Footer */
+        footer {
+            text-align: center;
+            padding: 30px;
+            color: rgba(255, 255, 255, 0.6);
+            margin-top: 50px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>⚽ Corner Predictor</h1>
+            <p class="subtitle">Analiza Over 9.5 Rzutów Rożnych</p>
+        </header>
+
+        <div class="button-group">
+            <button class="btn btn-primary" onclick="fetchMatches()">🔄 Pobierz Mecze</button>
+            <button class="btn btn-secondary" onclick="analyzeOver95()">📊 Analizuj Over 9.5</button>
+            <button class="btn btn-white" onclick="showHistory()">📜 Historia</button>
+        </div>
+
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <p>Pobieranie danych...</p>
+        </div>
+
+        <div id="stats" class="stats-grid" style="display: none;">
+            <div class="stat-card">
+                <div class="stat-label">Dzisiejsze Mecze</div>
+                <div class="stat-value" id="total-matches">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Ligi</div>
+                <div class="stat-value" id="total-leagues">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Kwalifikujące się</div>
+                <div class="stat-value" id="qualified-matches">0</div>
+            </div>
+        </div>
+
+        <div id="matches-container"></div>
+    </div>
+
+    <!-- Modal dla analizy -->
+    <div id="analysisModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('analysisModal')">&times;</span>
+            <h2 style="color: #EF0107; margin-bottom: 20px;">📊 Analiza Over 9.5</h2>
+            <div id="analysis-content"></div>
+        </div>
+    </div>
+
+    <!-- Modal dla historii -->
+    <div id="historyModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('historyModal')">&times;</span>
+            <h2 style="color: #EF0107; margin-bottom: 20px;">📜 Historia Meczów</h2>
+            <div id="history-content"></div>
+        </div>
+    </div>
+
+    <footer>
+        <p>Corner Predictor - System analizy rzutów rożnych Over 9.5</p>
+        <p style="font-size: 0.9em; margin-top: 10px;">Powered by Football Data API</p>
+    </footer>
+
+    <script>
+        // API Configuration
+        const API_KEY = '8cdad7757b702fae3b792c0b3328017ee33cc17594b18ea8a2717cdc53162325';
+        
+        // Konfiguracja: użyj lokalnego proxy servera (uruchom: python3 proxy_server.py)
+        const BASE_URL = 'http://localhost:8080/api';
+        const USE_PROXY = false; // false = używa lokalnego proxy, true = używa zewnętrznych proxy (często 403)
+        
+        // Debug: sprawdź konfigurację
+        console.log('🔧 Konfiguracja API:', { BASE_URL, USE_PROXY, proxy: getProxy() });
+        
+        // Proxy dla CORS - więcej opcji na wypadek blokad
+        const PROXY_SERVICES = [
+            'https://corsproxy.io/?',
+            'https://api.allorigins.win/raw?url=',
+            'https://cors-anywhere.herokuapp.com/',
+            'https://thingproxy.freeboard.io/fetch/',
+        ];
+        let currentProxyIndex = 0;
+        
+        function getProxy() {
+            if (!USE_PROXY) return ''; // Brak proxy jeśli używamy lokalnego serwera
+            return PROXY_SERVICES[currentProxyIndex];
+        }
+
+        // Global state
+        let matchesData = [];
+        let leaguesData = {};
+        let teamsData = {};
+        let analyzedMatches = [];
+        let lastAnalysisHash = null; // Hash meczów z ostatniej analizy
+
+        // Fetch matches from API
+        async function fetchMatches() {
+            showLoading(true);
+            displayMessage('Pobieranie meczów z API...', 'info');
+            
+            try {
+                const today = new Date().toISOString().split('T')[0];
+                const proxy = getProxy();
+                
+                // Jeśli używasz lokalnego proxy, API_KEY jest już w URL przez backend
+                let url;
+                if (USE_PROXY) {
+                    url = `${proxy}${BASE_URL}/todays-matches?key=${API_KEY}`;
+                } else {
+                    url = `${BASE_URL}/todays-matches`;
+                }
+                
+                console.log('Pobieranie meczów z:', url);
+                
+                const response = await fetch(url);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                
+                if (!data.success || !data.data || !Array.isArray(data.data)) {
+                    throw new Error('Brak danych w odpowiedzi API');
+                }
+                
+                // Filtruj tylko mecze z dzisiaj (według date_unix w UTC)
+                // date_unix z API jest w UTC, więc musimy użyć UTC do obliczania przedziałów
+                const todayUTC = new Date().toISOString().split('T')[0]; // Format YYYY-MM-DD
+                const todayStart = Math.floor(new Date(todayUTC + 'T00:00:00Z').getTime() / 1000); // Unix timestamp początku dnia UTC
+                const todayEnd = todayStart + 86399; // +23:59:59 = 86399 sekund
+                
+                const allMatches = data.data || [];
+                console.log(`📅 Pobrano ${allMatches.length} meczów z API`);
+                console.log(`📅 Dzisiejszy zakres UTC: ${new Date(todayStart * 1000).toISOString()} - ${new Date(todayEnd * 1000).toISOString()}`);
+                
+                // Pokazuj WSZYSTKIE mecze z dzisiaj - niezależnie od statusu (rozegrane, trwające, oczekujące)
+                // Rozszerzamy zakres o 6 godzin w każdą stronę aby uwzględnić różnice stref czasowych
+                const extendedStart = todayStart - 21600; // 6 godzin wcześniej
+                const extendedEnd = todayEnd + 21600; // 6 godzin później
+                
+                const filteredOut = [];
+                matchesData = allMatches.filter(match => {
+                    const matchDateUnix = match.date_unix;
+                    const status = match.status || 'unknown';
+                    const homeName = match.home_name || 'N/A';
+                    const awayName = match.away_name || 'N/A';
+                    
+                    if (!matchDateUnix) {
+                        filteredOut.push({match: `${homeName} vs ${awayName}`, reason: 'brak date_unix', status});
+                        return false;
+                    }
+                    
+                    // Pokazuj mecz jeśli jest w rozszerzonym zakresie (dzisiaj +/- 6h)
+                    // To uwzględnia różnice stref czasowych i mecze które mogą się kończyć/zaczynać dzisiaj
+                    const isInRange = matchDateUnix >= extendedStart && matchDateUnix <= extendedEnd;
+                    
+                    if (!isInRange) {
+                        const matchDate = new Date(matchDateUnix * 1000).toISOString();
+                        filteredOut.push({match: `${homeName} vs ${awayName}`, reason: `poza zakresem (${matchDate})`, status});
+                        return false;
+                    }
+                    
+                    return true;
+                });
+                
+                console.log(`✅ Filtrowanie meczów: ${allMatches.length} wszystkich, ${matchesData.length} pokazanych (wszystkie statusy)`);
+                if (filteredOut.length > 0) {
+                    console.log(`❌ Odfiltrowano ${filteredOut.length} meczów:`);
+                    filteredOut.forEach((item, idx) => {
+                        console.log(`   ${idx + 1}. ${item.match} - ${item.reason} (status: ${item.status})`);
+                    });
+                }
+                
+                // Loguj pokazane mecze z ich statusami
+                console.log(`📋 Pokazane mecze (${matchesData.length}):`);
+                matchesData.forEach((match, idx) => {
+                    const status = match.status || 'unknown';
+                    const time = match.date_unix ? new Date(match.date_unix * 1000).toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' }) : '-';
+                    console.log(`   ${idx + 1}. ${match.home_name} vs ${match.away_name} (${time}) - status: ${status}`);
+                });
+                
+                // Zapisz do localStorage
+                localStorage.setItem('matchesData', JSON.stringify(matchesData));
+                localStorage.setItem('matchesDate', today);
+                
+                // Jeśli mecze się zmieniły, wyczyść cache analizy
+                const currentHash = createMatchesHash(matchesData);
+                const cachedHash = localStorage.getItem('lastAnalysisHash');
+                if (cachedHash !== currentHash) {
+                    console.log('📋 Mecze się zmieniły - czyszczę cache analizy');
+                    localStorage.removeItem('lastAnalysis');
+                    localStorage.removeItem('lastAnalysisHash');
+                    analyzedMatches = [];
+                    lastAnalysisHash = null;
+                }
+                
+                showLoading(false);
+                displayMatches();
+                displayMessage(`✓ Pobrano ${matchesData.length} meczów!`, 'success');
+            } catch (error) {
+                showLoading(false);
+                console.error('Błąd pobierania meczów:', error);
+                displayMessage('Błąd pobierania danych: ' + error.message, 'error');
+                
+                // Spróbuj załadować z localStorage
+                const savedMatches = localStorage.getItem('matchesData');
+                const savedDate = localStorage.getItem('matchesDate');
+                if (savedMatches && savedDate === new Date().toISOString().split('T')[0]) {
+                    const parsed = JSON.parse(savedMatches);
+                    // Filtruj też z cache (na wypadek jeśli były w cache mecze z jutra)
+                    const todayUTC = new Date().toISOString().split('T')[0];
+                    const todayStart = Math.floor(new Date(todayUTC + 'T00:00:00Z').getTime() / 1000);
+                    const todayEnd = todayStart + 86399;
+                    
+                    matchesData = parsed.filter(match => {
+                        const matchDateUnix = match.date_unix;
+                        if (!matchDateUnix) return false;
+                        return matchDateUnix >= todayStart && matchDateUnix <= todayEnd;
+                    });
+                    displayMatches();
+                    displayMessage('Załadowano dane z cache', 'info');
+                }
+            }
+        }
+
+        // Display matches
+        function displayMatches() {
+            const container = document.getElementById('matches-container');
+            if (matchesData.length === 0) {
+                container.innerHTML = '<div class="card" style="grid-column: 1 / -1;"><p style="color: #FFFFFF; text-align: center;">Brak meczów do wyświetlenia</p></div>';
+                return;
+            }
+            
+            // Pobierz nazwy lig (z cache jeśli dostępne)
+            let leaguesMap = {};
+            try {
+                const saved = localStorage.getItem('leaguesMap');
+                if (saved) {
+                    leaguesMap = JSON.parse(saved);
+                }
+            } catch (e) {
+                console.error('Błąd odczytu leaguesMap:', e);
+            }
+            
+            // Grupuj mecze według ligi
+            const matchesByLeague = {};
+            matchesData.forEach(match => {
+                const competitionId = match.competition_id;
+                const leagueKey = leaguesMap[competitionId] || `Liga ID: ${competitionId}`;
+                
+                if (!matchesByLeague[leagueKey]) {
+                    matchesByLeague[leagueKey] = [];
+                }
+                matchesByLeague[leagueKey].push(match);
+            });
+            
+            // Przygotuj ligi z informacją o liczbie meczów
+            const leagueEntries = Object.entries(matchesByLeague).map(([key, matches]) => ({
+                key,
+                matches,
+                count: matches.length
+            }));
+            
+            // Sortuj ligi według liczby meczów (malejąco)
+            leagueEntries.sort((a, b) => b.count - a.count);
+            
+            // Podziel ligi na pary - w każdej parze lewa (A) ma więcej meczów niż prawa (B)
+            const leaguePairs = [];
+            for (let i = 0; i < leagueEntries.length; i += 2) {
+                if (i + 1 < leagueEntries.length) {
+                    // Para lig - upewnij się, że lewa ma więcej
+                    const left = leagueEntries[i];
+                    const right = leagueEntries[i + 1];
+                    if (left.count >= right.count) {
+                        leaguePairs.push([left, right]);
+                    } else {
+                        leaguePairs.push([right, left]);
+                    }
+                } else {
+                    // Ostatnia liga bez pary - dodaj do lewej kolumny
+                    leaguePairs.push([leagueEntries[i], null]);
+                }
+            }
+            
+            // Funkcja do generowania HTML dla sekcji ligi
+            const generateLeagueHTML = (league) => {
+                if (!league) return '';
+                const matchText = league.count === 1 ? '1 mecz' : `${league.count} meczów`;
+                let html = `
+                    <div class="league-section">
+                        <div class="league-title">🏆 ${league.key} (${matchText})</div>
+                `;
+                
+                league.matches.forEach(match => {
+                    const homeName = match.home_name || 'N/A';
+                    const awayName = match.away_name || 'N/A';
+                    const dateUnix = match.date_unix;
+                    const status = match.status || 'pending';
+                    let timeStr = '-';
+                    let statusBadge = '';
+                    
+                    if (dateUnix) {
+                        const date = new Date(dateUnix * 1000);
+                        timeStr = date.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' });
+                    }
+                    
+                    // Dodaj badge statusu
+                    if (status === 'complete' || status === 'finished' || status === 'FT') {
+                        statusBadge = '<span style="background: #4CAF50; color: white; padding: 2px 6px; border-radius: 3px; font-size: 0.8em; margin-left: 5px;">Zakończony</span>';
+                    } else if (status === 'live' || status === 'inplay' || status === 'LIVE') {
+                        statusBadge = '<span style="background: #EF0107; color: white; padding: 2px 6px; border-radius: 3px; font-size: 0.8em; margin-left: 5px;">LIVE</span>';
+                    } else if (status === 'pending' || status === 'scheduled') {
+                        statusBadge = '<span style="background: #FF9800; color: white; padding: 2px 6px; border-radius: 3px; font-size: 0.8em; margin-left: 5px;">Oczekuje</span>';
+                    }
+                    
+                    html += `
+                        <div class="match-item">
+                            <span class="match-time">${timeStr}</span>
+                            <div class="match-teams">${homeName} vs ${awayName} ${statusBadge}</div>
+                        </div>
+                    `;
+                });
+                
+                html += '</div>';
+                return html;
+            };
+            
+            // Generuj HTML - każda para lig w osobnym wierszu
+            let html = '';
+            leaguePairs.forEach(([leftLeague, rightLeague]) => {
+                html += '<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">';
+                html += '<div>' + generateLeagueHTML(leftLeague) + '</div>';
+                html += '<div>' + generateLeagueHTML(rightLeague) + '</div>';
+                html += '</div>';
+            });
+            
+            container.innerHTML = html;
+            
+            // Aktualizuj statystyki
+            document.getElementById('total-matches').textContent = matchesData.length;
+            document.getElementById('total-leagues').textContent = leagueEntries.length;
+            document.getElementById('stats').style.display = 'grid';
+        }
+
+        // Fetch team stats from API
+        async function fetchTeamStats(teamId, competitionId) {
+            try {
+                const proxy = getProxy();
+                
+                // Najpierw spróbuj league-season
+                let url;
+                if (USE_PROXY) {
+                    url = `${proxy}${BASE_URL}/league-season?key=${API_KEY}&season_id=${competitionId}`;
+                } else {
+                    url = `${BASE_URL}/league-season?season_id=${competitionId}`;
+                }
+                let response = await fetch(url);
+                
+                // Jeśli 403 i używamy zewnętrznego proxy, spróbuj zmienić proxy
+                if (response.status === 403 && USE_PROXY) {
+                    console.warn(`⚠️ 403 Forbidden dla league-season, próbuję zmienić proxy...`);
+                    // Próbuj następnego proxy
+                    currentProxyIndex = (currentProxyIndex + 1) % PROXY_SERVICES.length;
+                    const newProxy = getProxy();
+                    url = `${newProxy}${BASE_URL}/league-season?key=${API_KEY}&season_id=${competitionId}`;
+                    response = await fetch(url);
+                } else if (response.status === 403 && !USE_PROXY) {
+                    console.error('❌ 403 Forbidden - sprawdź czy proxy server działa na localhost:8080');
+                    console.error('   Uruchom: python3 proxy_server.py');
+                }
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.success && data.data) {
+                        // Znajdź drużynę w danych
+                        const clubs = Array.isArray(data.data) ? data.data : (data.data.clubs || []);
+                        for (const club of clubs) {
+                            if (club.id === teamId) {
+                                return club;
+                            }
+                        }
+                    }
+                }
+                
+                // Fallback: pobierz mecze z ligi
+                if (USE_PROXY) {
+                    url = `${proxy}${BASE_URL}/league-matches?key=${API_KEY}&season_id=${competitionId}`;
+                } else {
+                    url = `${BASE_URL}/league-matches?season_id=${competitionId}`;
+                }
+                response = await fetch(url);
+                
+                // Jeśli 403 i używamy zewnętrznego proxy, spróbuj zmienić proxy
+                if (response.status === 403 && USE_PROXY) {
+                    console.warn(`403 Forbidden dla league-matches, próbuję zmienić proxy...`);
+                    currentProxyIndex = (currentProxyIndex + 1) % PROXY_SERVICES.length;
+                    const newProxy = getProxy();
+                    url = `${newProxy}${BASE_URL}/league-matches?key=${API_KEY}&season_id=${competitionId}`;
+                    response = await fetch(url);
+                }
+                
+                if (!response.ok) {
+                    console.error(`Błąd pobierania league-matches: ${response.status}`);
+                    return null;
+                }
+                
+                const data = await response.json();
+                if (!data.success || !data.data) return null;
+                
+                // Filtruj mecze z tą drużyną (zakończone)
+                const teamMatches = data.data
+                    .filter(m => m.status === 'complete' && (m.homeID === teamId || m.awayID === teamId))
+                    .sort((a, b) => (b.date_unix || 0) - (a.date_unix || 0))
+                    .slice(0, 5);
+                
+                if (teamMatches.length === 0) return null;
+                
+                // Oblicz statystyki z meczów
+                return calculateStatsFromMatches(teamMatches, teamId);
+                
+            } catch (error) {
+                console.error('Błąd pobierania statystyk:', error);
+                return null;
+            }
+        }
+
+        // Calculate stats from matches
+        function calculateStatsFromMatches(matches, teamId) {
+            if (!matches || matches.length === 0) return null;
+            
+            let totalCorners = 0;
+            let totalShots = 0;
+            let totalPossession = 0;
+            let totalDangerousAttacks = 0;
+            let over95Count = 0;
+            const recentMatches = [];
+            
+            matches.forEach(match => {
+                const isHome = match.homeID === teamId;
+                const corners = isHome ? (match.team_a_corners || 0) : (match.team_b_corners || 0);
+                const oppCorners = isHome ? (match.team_b_corners || 0) : (match.team_a_corners || 0);
+                const totalCornerCount = (match.totalCornerCount || 0);
+                
+                const shots = isHome ? (match.team_a_shots || 0) : (match.team_b_shots || 0);
+                const possession = isHome ? (match.team_a_possession || 0) : (match.team_b_possession || 0);
+                const dangerousAttacks = isHome ? (match.team_a_dangerous_attacks || 0) : (match.team_b_dangerous_attacks || 0);
+                
+                totalCorners += corners;
+                totalShots += shots;
+                totalPossession += possession;
+                totalDangerousAttacks += dangerousAttacks;
+                
+                if (totalCornerCount > 9.5) {
+                    over95Count++;
+                }
+                
+                recentMatches.push({
+                    totalCornerCount: totalCornerCount,
+                    corners: corners,
+                    shots: shots,
+                    possession: possession,
+                    dangerousAttacks: dangerousAttacks
+                });
+            });
+            
+            const matchCount = matches.length;
+            
+            return {
+                avg_corners: totalCorners / matchCount,
+                avg_shots: totalShots / matchCount,
+                avg_possession: totalPossession / matchCount,
+                avg_dangerous_attacks: totalDangerousAttacks / matchCount,
+                over95_percentages: [(over95Count / matchCount) * 100],
+                recent_matches: recentMatches
+            };
+        }
+
+        // Calculate Over 9.5 percentage
+        function calculateOver95Percentage(stats) {
+            if (!stats || !stats.recent_matches || stats.recent_matches.length === 0) {
+                // Spróbuj z over95_percentages jeśli dostępne
+                if (stats?.over95_percentages && stats.over95_percentages.length > 0) {
+                    return stats.over95_percentages[0];
+                }
+                return 0;
+            }
+            
+            const validMatches = stats.recent_matches.filter(m => m.totalCornerCount !== -1 && m.totalCornerCount !== undefined);
+            if (validMatches.length === 0) return 0;
+            
+            const over95Count = validMatches.filter(m => m.totalCornerCount > 9.5).length;
+            return (over95Count / validMatches.length) * 100;
+        }
+
+        // Analyze single match
+        function analyzeMatch(match, homeStats, awayStats) {
+            const homePercent = calculateOver95Percentage(homeStats);
+            const awayPercent = calculateOver95Percentage(awayStats);
+            
+            // Podstawowe wymaganie
+            const meetsBasic = homePercent >= 50 && awayPercent >= 50;
+            
+            // Oblicz statystyki
+            const avgShotsHome = homeStats?.avg_shots || 0;
+            const avgShotsAway = awayStats?.avg_shots || 0;
+            const avgPossessionHome = homeStats?.avg_possession || 0;
+            const avgPossessionAway = awayStats?.avg_possession || 0;
+            const avgDangerousAttacksHome = homeStats?.avg_dangerous_attacks || 0;
+            const avgDangerousAttacksAway = awayStats?.avg_dangerous_attacks || 0;
+            
+            // Min rożne
+            const homeRecent = homeStats?.recent_matches || [];
+            const awayRecent = awayStats?.recent_matches || [];
+            
+            const homeValidCorners = homeRecent.slice(0, 5).map(m => m.totalCornerCount || -1).filter(v => v !== -1 && v !== 999);
+            const awayValidCorners = awayRecent.slice(0, 5).map(m => m.totalCornerCount || -1).filter(v => v !== -1 && v !== 999);
+            
+            const minCornersHome = homeValidCorners.length > 0 ? Math.min(...homeValidCorners) : 0;
+            const minCornersAway = awayValidCorners.length > 0 ? Math.min(...awayValidCorners) : 0;
+            
+            // Średnia łącznych rożnych
+            const avgTotalCornersHome = homeValidCorners.length > 0 
+                ? homeValidCorners.reduce((sum, v) => sum + v, 0) / homeValidCorners.length 
+                : 0;
+            const avgTotalCornersAway = awayValidCorners.length > 0 
+                ? awayValidCorners.reduce((sum, v) => sum + v, 0) / awayValidCorners.length 
+                : 0;
+            
+            // Trend
+            let trendOk = false;
+            for (const stats of [homeStats, awayStats]) {
+                const recent = stats?.recent_matches || [];
+                if (recent.length >= 4) {
+                    const first2 = recent.slice(0, 2);
+                    const last2 = recent.slice(-2);
+                    const first2Avg = first2.reduce((sum, m) => sum + (m.totalCornerCount || 0), 0) / 2;
+                    const last2Avg = last2.reduce((sum, m) => sum + (m.totalCornerCount || 0), 0) / 2;
+                    if (last2Avg > first2Avg) {
+                        trendOk = true;
+                        break;
+                    }
+                }
+            }
+            
+            // Kategorie
+            const categories = [];
+            let score = 0;
+            
+            // 1. Over 9.5
+            const avgOver95 = (homePercent + awayPercent) / 2;
+            const sumOver95 = homePercent + awayPercent;
+            const meetsOver95 = (
+                avgOver95 >= 60 ||
+                sumOver95 >= 100 ||
+                (homePercent >= 60 && awayPercent >= 40) ||
+                (awayPercent >= 60 && homePercent >= 40)
+            );
+            if (meetsOver95) {
+                categories.push(`✓ Over 9.5 ≥ 60% (${homePercent.toFixed(2)}% | ${awayPercent.toFixed(2)}%)`);
+                score++;
+            } else {
+                categories.push(`✗ Over 9.5 = ${homePercent.toFixed(2)}% | ${awayPercent.toFixed(2)}%`);
+            }
+            
+            // 2. Strzały
+            if (avgShotsHome > 15 && avgShotsAway > 15) {
+                categories.push(`✓ Strzały > 15 (${avgShotsHome.toFixed(1)} | ${avgShotsAway.toFixed(1)})`);
+                score++;
+            } else {
+                categories.push(`✗ Strzały = ${avgShotsHome.toFixed(1)} | ${avgShotsAway.toFixed(1)}`);
+            }
+            
+            // 3. Posiadanie
+            if (avgPossessionHome >= 45 && avgPossessionAway >= 45) {
+                categories.push(`✓ Posiadanie ≥ 45% (${avgPossessionHome.toFixed(0)}% | ${avgPossessionAway.toFixed(0)}%)`);
+                score++;
+            } else {
+                categories.push(`✗ Posiadanie = ${avgPossessionHome.toFixed(0)}% | ${avgPossessionAway.toFixed(0)}%`);
+            }
+            
+            // 4. Niebezpieczne ataki
+            if (avgDangerousAttacksHome > 50 && avgDangerousAttacksAway > 50) {
+                categories.push(`✓ Ataki > 50 (${avgDangerousAttacksHome.toFixed(1)} | ${avgDangerousAttacksAway.toFixed(1)})`);
+                score++;
+            } else {
+                categories.push(`✗ Ataki = ${avgDangerousAttacksHome.toFixed(1)} | ${avgDangerousAttacksAway.toFixed(1)}`);
+            }
+            
+            // 5. Śr łączne rożne
+            if (avgTotalCornersHome > 9.5 && avgTotalCornersAway > 9.5) {
+                categories.push(`✓ Śr łączne rożne > 9.5 (${avgTotalCornersHome.toFixed(1)} vs ${avgTotalCornersAway.toFixed(1)})`);
+                score++;
+            } else {
+                categories.push(`✗ Śr łączne rożne = ${avgTotalCornersHome.toFixed(1)} vs ${avgTotalCornersAway.toFixed(1)}`);
+            }
+            
+            // 6. Min rożne
+            if (minCornersHome >= 7 && minCornersAway >= 7) {
+                categories.push(`✓ Min rożne ≥ 7 (${minCornersHome} vs ${minCornersAway})`);
+                score++;
+            } else {
+                categories.push(`✗ Min rożne = ${minCornersHome} vs ${minCornersAway}`);
+            }
+            
+            // 7. Trend
+            if (trendOk) {
+                categories.push('✓ Trend rising');
+                score++;
+            } else {
+                categories.push('✗ Trend rising');
+            }
+            
+            const qualified = meetsBasic && score >= 4;
+            
+            return {
+                qualified,
+                score,
+                categories,
+                percent_sum: sumOver95,
+                home_percent: homePercent,
+                away_percent: awayPercent,
+                home_stats: homeStats,
+                away_stats: awayStats
+            };
+        }
+
+        // Fetch league names
+        async function fetchLeagueNames() {
+            try {
+                const saved = localStorage.getItem('leaguesMap');
+                if (saved) {
+                    return JSON.parse(saved);
+                }
+                
+                const proxy = getProxy();
+                let url;
+                if (USE_PROXY) {
+                    url = `${proxy}${BASE_URL}/league-list?key=${API_KEY}`;
+                } else {
+                    url = `${BASE_URL}/league-list`;
+                }
+                const response = await fetch(url);
+                
+                if (!response.ok) return {};
+                
+                const data = await response.json();
+                if (!data.success || !data.data) return {};
+                
+                const leaguesMap = {};
+                data.data.forEach(league => {
+                    const seasons = league.season || [];
+                    seasons.forEach(season => {
+                        if (season.id) {
+                            const country = league.country || '';
+                            const leagueName = league.league_name || league.name || '';
+                            leaguesMap[season.id] = `${country} - ${leagueName}`;
+                        }
+                    });
+                });
+                
+                localStorage.setItem('leaguesMap', JSON.stringify(leaguesMap));
+                return leaguesMap;
+            } catch (error) {
+                console.error('Błąd pobierania nazw lig:', error);
+                return {};
+            }
+        }
+
+        // Utwórz hash z meczów dla porównania
+        function createMatchesHash(matches) {
+            if (!matches || matches.length === 0) return '';
+            // Sortuj mecze i stwórz hash z ID i dat
+            const sorted = [...matches].sort((a, b) => (a.id || 0) - (b.id || 0));
+            const ids = sorted.map(m => `${m.id}_${m.date_unix}_${m.status}`).join('|');
+            return ids;
+        }
+
+        // Analyze Over 9.5 matches
+        async function analyzeOver95() {
+            if (matchesData.length === 0) {
+                displayMessage('Najpierw pobierz mecze!', 'warning');
+                return;
+            }
+            
+            // Sprawdź czy mecze się zmieniły od ostatniej analizy
+            const currentHash = createMatchesHash(matchesData);
+            const cachedAnalysis = localStorage.getItem('lastAnalysis');
+            const cachedHash = localStorage.getItem('lastAnalysisHash');
+            
+                if (cachedAnalysis && cachedHash === currentHash && analyzedMatches.length === 0) {
+                // Wczytaj z cache
+                try {
+                    const parsed = JSON.parse(cachedAnalysis);
+                    analyzedMatches = parsed;
+                    console.log(`📋 Wczytano analizę z cache (${analyzedMatches.length} meczów)`);
+                    
+                    // Aktualizuj statystyki na stronie głównej
+                    const qualifiedElement = document.getElementById('qualified-matches');
+                    if (qualifiedElement) {
+                        qualifiedElement.textContent = analyzedMatches.length;
+                    }
+                    
+                    displayAnalysisResults();
+                    document.getElementById('analysisModal').style.display = 'block';
+                    displayMessage(`✓ Wyświetlono poprzednią analizę (${analyzedMatches.length} meczów). Aby wykonać ponownie, użyj "Analizuj ponownie"`, 'info');
+                    return;
+                } catch (e) {
+                    console.error('Błąd odczytu cache analizy:', e);
+                }
+            }
+            
+            // Jeśli mecze się nie zmieniły ale mamy już wyniki w pamięci, użyj ich
+            if (currentHash === lastAnalysisHash && analyzedMatches.length > 0) {
+                console.log('📋 Używam wyników z pamięci (mecze nie zmieniły się)');
+                
+                // Aktualizuj statystyki na stronie głównej
+                const qualifiedElement = document.getElementById('qualified-matches');
+                if (qualifiedElement) {
+                    qualifiedElement.textContent = analyzedMatches.length;
+                }
+                
+                displayAnalysisResults();
+                document.getElementById('analysisModal').style.display = 'block';
+                displayMessage(`✓ Wyświetlono analizę z pamięci (${analyzedMatches.length} meczów)`, 'info');
+                return;
+            }
+            
+            showLoading(true);
+            displayMessage('Analizowanie meczów...', 'info');
+            
+            try {
+                // Pobierz nazwy lig
+                const leaguesMap = await fetchLeagueNames();
+                
+                // Pobierz statystyki dla wszystkich drużyn
+                analyzedMatches = [];
+                let processed = 0;
+                const total = matchesData.length;
+                
+                for (const match of matchesData) {
+                    processed++;
+                    const progress = Math.round((processed / total) * 100);
+                    displayMessage(`Analizowanie meczu ${processed}/${total} (${progress}%)...`, 'info');
+                    
+                    const competitionId = match.competition_id;
+                    const homeId = match.homeID;
+                    const awayId = match.awayID;
+                    
+                    if (!competitionId || !homeId || !awayId) {
+                        continue;
+                    }
+                    
+                    // Pobierz statystyki obu drużyn
+                    const [homeStats, awayStats] = await Promise.all([
+                        fetchTeamStats(homeId, competitionId),
+                        fetchTeamStats(awayId, competitionId)
+                    ]);
+                    
+                    if (!homeStats || !awayStats) {
+                        continue;
+                    }
+                    
+                    // Analizuj mecz
+                    const analysis = analyzeMatch(match, homeStats, awayStats);
+                    
+                    if (analysis.qualified) {
+                        analyzedMatches.push({
+                            match,
+                            league: leaguesMap[competitionId] || `Liga ID: ${competitionId}`,
+                            analysis,
+                            home_name: match.home_name,
+                            away_name: match.away_name,
+                            time: match.date_unix ? new Date(match.date_unix * 1000).toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' }) : '-'
+                        });
+                    }
+                    
+                    // Opóźnienie między requestami
+                    await new Promise(resolve => setTimeout(resolve, 200));
+                }
+                
+                // Sortuj według score i percent_sum
+                analyzedMatches.sort((a, b) => {
+                    if (b.analysis.score !== a.analysis.score) {
+                        return b.analysis.score - a.analysis.score;
+                    }
+                    return b.analysis.percent_sum - a.analysis.percent_sum;
+                });
+                
+                // Zapisz do cache
+                lastAnalysisHash = currentHash;
+                localStorage.setItem('lastAnalysis', JSON.stringify(analyzedMatches));
+                localStorage.setItem('lastAnalysisHash', currentHash);
+                
+                // Automatycznie zapisz do historii jeśli to pierwsza analiza dzisiaj
+                if (analyzedMatches.length > 0) {
+                    try {
+                        const today = new Date().toISOString().split('T')[0];
+                        const savedHistory = localStorage.getItem('over95_history');
+                        let history = savedHistory ? JSON.parse(savedHistory) : [];
+                        
+                        // Sprawdź czy już zapisano mecze dzisiaj (sprawdź pole saved_date lub ostatni zapis)
+                        let lastSaveDate = null;
+                        const lastSaveDateStr = localStorage.getItem('lastHistorySaveDate');
+                        if (lastSaveDateStr) {
+                            lastSaveDate = lastSaveDateStr;
+                        } else if (history.length > 0) {
+                            // Fallback: sprawdź datę ostatniego meczu (jeśli nie ma saved_date)
+                            const lastMatch = history.reduce((latest, match) => {
+                                const matchSavedDate = match.saved_date || (match.date_unix ? new Date(match.date_unix * 1000).toISOString().split('T')[0] : null);
+                                const latestSavedDate = latest.saved_date || (latest.date_unix ? new Date(latest.date_unix * 1000).toISOString().split('T')[0] : null);
+                                return (matchSavedDate && matchSavedDate > (latestSavedDate || '')) ? match : latest;
+                            });
+                            if (lastMatch.saved_date) {
+                                lastSaveDate = lastMatch.saved_date;
+                            } else if (lastMatch.date_unix) {
+                                lastSaveDate = new Date(lastMatch.date_unix * 1000).toISOString().split('T')[0];
+                            }
+                        }
+                        
+                        // Jeśli nie zapisano dzisiaj, zapisz automatycznie
+                        if (lastSaveDate !== today) {
+                            let savedCount = 0;
+                            analyzedMatches.forEach(item => {
+                                const { match, league, analysis } = item;
+                                
+                                // Sprawdź czy mecz już istnieje w historii
+                                const matchId = match.id || `${match.homeID}_${match.awayID}_${match.date_unix}`;
+                                const alreadyExists = history.some(h => 
+                                    (h.api_match_id === match.id) ||
+                                    (h.match_id === matchId) ||
+                                    (h.home_id === match.homeID && h.away_id === match.awayID && 
+                                     h.date_unix === match.date_unix)
+                                );
+                                
+                                if (!alreadyExists) {
+                                    const historyEntry = {
+                                        match_id: matchId,
+                                        api_match_id: match.id,
+                                        home_id: match.homeID,
+                                        away_id: match.awayID,
+                                        home_name: match.home_name || item.home_name,
+                                        away_name: match.away_name || item.away_name,
+                                        league_name: league.split(' - ').slice(-1)[0] || league,
+                                        country: league.split(' - ')[0] || '',
+                                        date_unix: match.date_unix || 0,
+                                        date_formatted: match.date_unix ? new Date(match.date_unix * 1000).toLocaleString('pl-PL') : 'N/A',
+                                        saved_date: today, // Data zapisu do historii
+                                        over95_percentages: [analysis.home_percent, analysis.away_percent],
+                                        home_stats: analysis.home_stats || {},
+                                        away_stats: analysis.away_stats || {},
+                                        categories: analysis.categories || [],
+                                        score: analysis.score || 0,
+                                        percent_sum: analysis.percent_sum || 0,
+                                        status: 'pending',
+                                        result: 'pending',
+                                        match: match,
+                                        analysis: analysis,
+                                        league: league
+                                    };
+                                    history.push(historyEntry);
+                                    savedCount++;
+                                }
+                            });
+                            
+                            if (savedCount > 0) {
+                                localStorage.setItem('over95_history', JSON.stringify(history));
+                                localStorage.setItem('lastHistorySaveDate', today);
+                                console.log(`💾 Automatycznie zapisano ${savedCount} meczów do historii (pierwsza analiza dzisiaj)`);
+                                displayMessage(`💾 Automatycznie zapisano ${savedCount} meczów do historii`, 'success');
+                            }
+                        }
+                    } catch (e) {
+                        console.error('Błąd podczas automatycznego zapisu do historii:', e);
+                    }
+                }
+                
+                // Aktualizuj statystyki na stronie głównej
+                const qualifiedElement = document.getElementById('qualified-matches');
+                if (qualifiedElement) {
+                    qualifiedElement.textContent = analyzedMatches.length;
+                }
+                
+                showLoading(false);
+                displayAnalysisResults();
+                document.getElementById('analysisModal').style.display = 'block';
+                
+                if (analyzedMatches.length > 0) {
+                    displayMessage(`✓ Znaleziono ${analyzedMatches.length} kwalifikujących się meczów!`, 'success');
+                } else {
+                    displayMessage('ℹ️ Nie znaleziono meczów spełniających kryteria Over 9.5', 'info');
+                }
+                
+            } catch (error) {
+                showLoading(false);
+                console.error('Błąd analizy:', error);
+                displayMessage('Błąd analizy: ' + error.message, 'error');
+            }
+        }
+
+        // Display analysis results
+        function displayAnalysisResults() {
+            const content = document.getElementById('analysis-content');
+            
+            if (analyzedMatches.length === 0) {
+                content.innerHTML = `
+                    <div class="card">
+                        <p style="color: #FFFFFF; text-align: center;">
+                            Brak meczów kwalifikujących się do Over 9.5.<br>
+                            Żaden mecz nie spełnia wymaganych kryteriów (≥50% oba zespoły i ≥4 z 7 kryteriów).
+                        </p>
+                        <div style="text-align: center; margin-top: 20px;">
+                            <button onclick="analyzeOver95()" style="
+                                background: #EF0107;
+                                color: white;
+                                border: none;
+                                padding: 10px 20px;
+                                border-radius: 5px;
+                                cursor: pointer;
+                                font-size: 14px;
+                            ">🔄 Analizuj ponownie</button>
+                        </div>
+                    </div>
+                `;
+                return;
+            }
+            
+            let html = `
+                <div style="margin-bottom: 20px; padding: 15px; background: rgba(239, 1, 7, 0.2); border-radius: 10px; border-left: 4px solid #EF0107;">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <h3 style="color: #EF0107; margin-bottom: 10px;">✅ Znaleziono ${analyzedMatches.length} meczów kwalifikujących się</h3>
+                            <p style="color: #FFFFFF;">Mecze posortowane według score (najwyższy pierwszy)</p>
+                        </div>
+                        <button onclick="forceReanalyze()" style="
+                            background: #023474;
+                            color: white;
+                            border: none;
+                            padding: 8px 16px;
+                            border-radius: 5px;
+                            cursor: pointer;
+                            font-size: 12px;
+                            white-space: nowrap;
+                        ">🔄 Analizuj ponownie</button>
+                    </div>
+                </div>
+            `;
+            
+            analyzedMatches.forEach((item, index) => {
+                const { match, league, analysis } = item;
+                const basicRequirement = analysis.home_percent >= 50 && analysis.away_percent >= 50;
+                const basicText = basicRequirement 
+                    ? `✓ WYMAGANIE PODSTAWOWE: Oba zespoły ≥ 50% (${analysis.home_percent.toFixed(2)}% | ${analysis.away_percent.toFixed(2)}%)`
+                    : `✗ WYMAGANIE PODSTAWOWE: Oba zespoły ≥ 50% - NIE SPEŁNIONE (${analysis.home_percent.toFixed(2)}% | ${analysis.away_percent.toFixed(2)}%)`;
+                
+                html += `
+                    <div class="card" style="margin-bottom: 20px;">
+                        <div class="card-header">
+                            🏆 ${league}
+                        </div>
+                        <div style="padding: 15px;">
+                            <h3 style="color: #FFFFFF; margin-bottom: 15px; font-size: 1.2em;">
+                                ${item.time} | ${item.home_name} vs ${item.away_name}
+                            </h3>
+                            <div style="margin-bottom: 15px; padding: 10px; background: rgba(2, 52, 116, 0.2); border-radius: 8px;">
+                                <p style="color: #FFFFFF; margin: 5px 0;">
+                                    <strong>Suma %:</strong> ${analysis.percent_sum.toFixed(2)}% 
+                                    (${analysis.home_percent.toFixed(2)}% | ${analysis.away_percent.toFixed(2)}%)
+                                </p>
+                                <p style="color: #EF0107; margin: 5px 0; font-size: 1.1em; font-weight: bold;">
+                                    Score: ${analysis.score}/7
+                                </p>
+                            </div>
+                            
+                            <div style="margin-top: 15px;">
+                                <p style="color: ${basicRequirement ? '#4CAF50' : '#EF0107'}; margin: 5px 0;">
+                                    ${basicText}
+                                </p>
+                                <p style="color: #FFFFFF; margin-top: 10px; font-weight: bold;">Szczegóły wymagań:</p>
+                                ${analysis.categories.map(cat => {
+                                    const color = cat.startsWith('✓') ? '#4CAF50' : cat.startsWith('✗') ? '#EF0107' : '#FFFFFF';
+                                    return `<p style="color: ${color}; margin: 5px 0; padding-left: 20px;">${cat}</p>`;
+                                }).join('')}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            content.innerHTML = html;
+        }
+
+        // Wymuś ponowną analizę (ignoruj cache)
+        async function forceReanalyze() {
+            console.log('🔄 Wymuszam ponowną analizę...');
+            lastAnalysisHash = null;
+            analyzedMatches = [];
+            localStorage.removeItem('lastAnalysis');
+            localStorage.removeItem('lastAnalysisHash');
+            await analyzeOver95();
+        }
+
+        // Weryfikuj wyniki meczów w historii
+        async function verifyHistoryResults() {
+            const savedHistory = localStorage.getItem('over95_history');
+            if (!savedHistory) {
+                displayMessage('Brak historii do weryfikacji', 'warning');
+                return;
+            }
+            
+            showLoading(true);
+            displayMessage('Weryfikowanie wyników meczów...', 'info');
+            
+            try {
+                let history = JSON.parse(savedHistory);
+                let verifiedCount = 0;
+                let updatedCount = 0;
+                
+                // Znajdź mecze które wymagają weryfikacji (status pending)
+                const pendingMatches = history.filter(m => m.status === 'pending' || m.result === 'pending');
+                
+                if (pendingMatches.length === 0) {
+                    showLoading(false);
+                    displayMessage('Wszystkie mecze są już zweryfikowane', 'info');
+                    return;
+                }
+                
+                displayMessage(`Weryfikowanie ${pendingMatches.length} meczów...`, 'info');
+                
+                for (let i = 0; i < pendingMatches.length; i++) {
+                    const match = pendingMatches[i];
+                    const matchId = match.api_match_id;
+                    
+                    if (!matchId) {
+                        console.log(`⚠️ Pomijam mecz ${match.home_name} vs ${match.away_name} - brak api_match_id`);
+                        continue;
+                    }
+                    
+                    try {
+                        // Pobierz dane meczu z API
+                        const proxy = getProxy();
+                        let url;
+                        if (USE_PROXY) {
+                            url = `${proxy}${BASE_URL}/match?key=${API_KEY}&match_id=${matchId}`;
+                        } else {
+                            url = `${BASE_URL}/match?match_id=${matchId}`;
+                        }
+                        
+                        const response = await fetch(url);
+                        if (!response.ok) continue;
+                        
+                        const data = await response.json();
+                        if (!data.success || !data.data) continue;
+                        
+                        const matchData = data.data;
+                        const status = matchData.status;
+                        
+                        // Sprawdź czy mecz się zakończył
+                        if (status === 'complete') {
+                            const totalCorners = matchData.totalCornerCount || 0;
+                            const expectedCorners = 9.5;
+                            
+                            // Aktualizuj status w historii
+                            const historyIndex = history.findIndex(h => 
+                                h.api_match_id === matchId || 
+                                (h.match_id === match.match_id)
+                            );
+                            
+                            if (historyIndex !== -1) {
+                                const result = totalCorners > expectedCorners ? 'won' : 'lost';
+                                history[historyIndex].status = 'verified';
+                                history[historyIndex].result = result;
+                                history[historyIndex].actual_corners = totalCorners;
+                                history[historyIndex].match = matchData;
+                                updatedCount++;
+                                console.log(`✓ Zaktualizowano ${match.home_name} vs ${match.away_name}: ${result} (${totalCorners} rożnych)`);
+                            }
+                        }
+                        
+                        verifiedCount++;
+                        
+                        // Opóźnienie między requestami
+                        await new Promise(resolve => setTimeout(resolve, 300));
+                    } catch (error) {
+                        console.error(`Błąd weryfikacji meczu ${match.home_name} vs ${match.away_name}:`, error);
+                    }
+                }
+                
+                // Zapisz zaktualizowaną historię
+                if (updatedCount > 0) {
+                    localStorage.setItem('over95_history', JSON.stringify(history));
+                    displayMessage(`✓ Zaktualizowano ${updatedCount} meczów w historii`, 'success');
+                    // Odśwież wyświetlanie historii
+                    showHistory();
+                } else {
+                    displayMessage('Brak meczów do aktualizacji', 'info');
+                }
+                
+                showLoading(false);
+            } catch (error) {
+                showLoading(false);
+                console.error('Błąd weryfikacji:', error);
+                displayMessage('Błąd podczas weryfikacji: ' + error.message, 'error');
+            }
+        }
+
+        // Show history
+        function showHistory() {
+            const savedHistory = localStorage.getItem('over95_history');
+            const content = document.getElementById('history-content');
+            
+            if (!savedHistory) {
+                content.innerHTML = `
+                    <div class="card">
+                        <p style="color: #FFFFFF; text-align: center; padding: 40px;">
+                            📋 Brak historii meczów.<br>
+                            <span style="color: rgba(255,255,255,0.7); font-size: 0.9em;">
+                                Po analizie i zapisaniu meczów, pojawią się tutaj.
+                            </span>
+                        </p>
+                    </div>
+                `;
+            } else {
+                try {
+                    const history = JSON.parse(savedHistory);
+                    
+                    // Grupuj mecze według daty
+                    const matchesByDate = {};
+                    history.forEach(match => {
+                        const dateUnix = match.date_unix || match.match?.date_unix || 0;
+                        if (dateUnix) {
+                            const date = new Date(dateUnix * 1000);
+                            const dateStr = date.toLocaleDateString('pl-PL', { 
+                                year: 'numeric', 
+                                month: 'long', 
+                                day: 'numeric' 
+                            });
+                            
+                            if (!matchesByDate[dateStr]) {
+                                matchesByDate[dateStr] = [];
+                            }
+                            matchesByDate[dateStr].push(match);
+                        }
+                    });
+                    
+                    // Sortuj daty (najnowsze pierwsze)
+                    const sortedDates = Object.keys(matchesByDate).sort((a, b) => {
+                        return new Date(b) - new Date(a);
+                    });
+                    
+                    let html = `
+                        <div style="margin-bottom: 20px; padding: 15px; background: rgba(239, 1, 7, 0.2); border-radius: 10px; border-left: 4px solid #EF0107;">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <div>
+                                    <h3 style="color: #EF0107; margin-bottom: 10px;">📜 Historia analizowanych meczów</h3>
+                                    <p style="color: #FFFFFF;">Łącznie: ${history.length} meczów w ${sortedDates.length} ${sortedDates.length === 1 ? 'dniu' : 'dniach'}</p>
+                                </div>
+                                <button onclick="verifyHistoryResults()" style="
+                                    background: #023474;
+                                    color: white;
+                                    border: none;
+                                    padding: 10px 20px;
+                                    border-radius: 5px;
+                                    cursor: pointer;
+                                    font-size: 14px;
+                                    font-weight: bold;
+                                ">🔄 Weryfikuj Wyniki</button>
+                            </div>
+                        </div>
+                    `;
+                    
+                    // Wyświetl mecze według dat
+                    sortedDates.forEach(dateStr => {
+                        const matches = matchesByDate[dateStr];
+                        
+                        html += `
+                            <div class="card" style="margin-bottom: 20px;">
+                                <div class="card-header">
+                                    📅 ${dateStr} (${matches.length} ${matches.length === 1 ? 'mecz' : 'meczów'})
+                                </div>
+                        `;
+                        
+                        matches.forEach((match, matchIdx) => {
+                            const matchData = match.match || match;
+                            const homeName = match.home_name || matchData.home_name || 'N/A';
+                            const awayName = match.away_name || matchData.away_name || 'N/A';
+                            const league = match.league || match.league_name || matchData.competition_id || 'N/A';
+                            const status = match.result || match.status || 'pending';
+                            const actualCorners = match.actual_corners || matchData.totalCornerCount || '-';
+                            const score = match.score || match.analysis?.score || 0;
+                            
+                            let statusBadge = '';
+                            let statusColor = '#FF9800';
+                            if (status === 'won') {
+                                statusBadge = '<span class="badge badge-success">✅ Wygrał</span>';
+                                statusColor = '#4CAF50';
+                            } else if (status === 'lost') {
+                                statusBadge = '<span class="badge badge-danger">❌ Przegrał</span>';
+                                statusColor = '#EF0107';
+                            } else {
+                                statusBadge = '<span class="badge badge-warning">⏳ Oczekuje</span>';
+                            }
+                            
+                            const matchId = `history_${dateStr.replace(/\s+/g, '_')}_${matchIdx}`;
+                            window[matchId] = match; // Zapisz match w globalnym scope
+                            
+                            html += `
+                                <div class="match-item" style="border-left-color: ${statusColor};">
+                                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                                        <div style="flex: 1;">
+                                            <div class="match-teams">${homeName} vs ${awayName}</div>
+                                            <div class="match-league">${league}</div>
+                                            <div style="margin-top: 10px;">
+                                                ${statusBadge}
+                                                <span style="color: #FFFFFF; margin-left: 10px;">
+                                                    Rzutów rożnych: <strong>${actualCorners}</strong> | Score: <strong>${score}/7</strong>
+                                                </span>
+                                            </div>
+                                        </div>
+                                        <button onclick="showMatchHistoryDetails(window['${matchId}'])" style="
+                                            background: #023474;
+                                            color: white;
+                                            border: none;
+                                            padding: 8px 16px;
+                                            border-radius: 5px;
+                                            cursor: pointer;
+                                            font-size: 12px;
+                                            margin-left: 15px;
+                                        ">🔍 Szczegóły</button>
+                                    </div>
+                                </div>
+                            `;
+                        });
+                        
+                        html += '</div>';
+                    });
+                    
+                    content.innerHTML = html;
+                } catch (e) {
+                    console.error('Błąd odczytu historii:', e);
+                    content.innerHTML = `
+                        <div class="card">
+                            <p style="color: #EF0107; text-align: center; padding: 40px;">
+                                ❌ Błąd odczytu historii: ${e.message}
+                            </p>
+                        </div>
+                    `;
+                }
+            }
+            
+            document.getElementById('historyModal').style.display = 'block';
+        }
+
+        // Pokaż szczegóły meczu z historii
+        function showMatchHistoryDetails(match) {
+            if (!match) {
+                displayMessage('Błąd: brak danych meczu', 'error');
+                return;
+            }
+            
+            const matchData = match.match || match;
+            const homeName = match.home_name || matchData.home_name || 'N/A';
+            const awayName = match.away_name || matchData.away_name || 'N/A';
+            const league = match.league || match.league_name || 'N/A';
+            const status = match.result || 'pending';
+            const actualCorners = match.actual_corners || '-';
+            const score = match.score || match.analysis?.score || 0;
+            const categories = match.categories || match.analysis?.categories || [];
+            const percentSum = match.percent_sum || match.analysis?.percent_sum || 0;
+            
+            let statusText = '';
+            let statusColor = '#FF9800';
+            if (status === 'won') {
+                statusText = '✅ Wygrał';
+                statusColor = '#4CAF50';
+            } else if (status === 'lost') {
+                statusText = '❌ Przegrał';
+                statusColor = '#EF0107';
+            } else {
+                statusText = '⏳ Oczekuje';
+            }
+            
+            let html = `
+                <div class="card">
+                    <div class="card-header">
+                        ${homeName} vs ${awayName}
+                    </div>
+                    <div style="padding: 20px;">
+                        <div style="margin-bottom: 20px;">
+                            <p style="color: #FFFFFF; margin: 5px 0;"><strong>Liga:</strong> ${league}</p>
+                            <p style="color: ${statusColor}; margin: 5px 0;"><strong>Status:</strong> ${statusText}</p>
+                            <p style="color: #FFFFFF; margin: 5px 0;"><strong>Rzutów rożnych:</strong> ${actualCorners}</p>
+                            <p style="color: #EF0107; margin: 5px 0; font-size: 1.2em;"><strong>Score:</strong> ${score}/7</p>
+                            <p style="color: #FFFFFF; margin: 5px 0;"><strong>Suma %:</strong> ${percentSum.toFixed(1)}%</p>
+                        </div>
+                        
+                        ${categories.length > 0 ? `
+                            <div style="margin-top: 20px;">
+                                <h4 style="color: #FFFFFF; margin-bottom: 10px;">Kryteria:</h4>
+                                ${categories.map(cat => {
+                                    const color = cat.startsWith('✓') ? '#4CAF50' : cat.startsWith('✗') ? '#EF0107' : '#FFFFFF';
+                                    return `<p style="color: ${color}; margin: 5px 0; padding-left: 20px;">${cat}</p>`;
+                                }).join('')}
+                            </div>
+                        ` : ''}
+                    </div>
+                </div>
+            `;
+            
+            // Utwórz nowy modal dla szczegółów
+            const detailsModal = document.createElement('div');
+            detailsModal.className = 'modal';
+            detailsModal.id = 'historyDetailsModal';
+            detailsModal.innerHTML = `
+                <div class="modal-content">
+                    <span class="close" onclick="closeModal('historyDetailsModal')">&times;</span>
+                    <h2 style="color: #EF0107; margin-bottom: 20px;">🔍 Szczegóły meczu</h2>
+                    ${html}
+                </div>
+            `;
+            document.body.appendChild(detailsModal);
+            detailsModal.style.display = 'block';
+        }
+
+        // Utility functions
+        function showLoading(show) {
+            document.getElementById('loading').style.display = show ? 'block' : 'none';
+        }
+
+        function displayMessage(message, type = 'info') {
+            const colors = {
+                'info': '#023474',
+                'success': '#4CAF50',
+                'error': '#EF0107',
+                'warning': '#FF9800'
+            };
+            
+            const messageDiv = document.createElement('div');
+            messageDiv.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                background: ${colors[type]};
+                color: #FFFFFF;
+                padding: 15px 25px;
+                border-radius: 10px;
+                box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+                z-index: 2000;
+                animation: slideIn 0.3s;
+            `;
+            messageDiv.textContent = message;
+            document.body.appendChild(messageDiv);
+            
+            setTimeout(() => {
+                messageDiv.style.animation = 'slideOut 0.3s';
+                setTimeout(() => messageDiv.remove(), 300);
+            }, 3000);
+        }
+
+        function closeModal(modalId) {
+            document.getElementById(modalId).style.display = 'none';
+        }
+
+        // Close modal when clicking outside
+        window.onclick = function(event) {
+            const modals = document.querySelectorAll('.modal');
+            modals.forEach(modal => {
+                if (event.target === modal) {
+                    modal.style.display = 'none';
+                }
+            });
+        }
+
+        // Initialize on page load
+        window.addEventListener('DOMContentLoaded', async function() {
+            console.log('Corner Predictor initialized');
+            
+            // Spróbuj załadować nazwy lig
+            await fetchLeagueNames();
+            
+            // Spróbuj załadować dane z localStorage
+            const savedMatches = localStorage.getItem('matchesData');
+            const savedDate = localStorage.getItem('matchesDate');
+            const today = new Date().toISOString().split('T')[0];
+            
+            if (savedMatches && savedDate === today) {
+                try {
+                    const parsed = JSON.parse(savedMatches);
+                    // Filtruj też z cache (na wypadek jeśli były w cache mecze z jutra)
+                    const todayUTC = new Date().toISOString().split('T')[0];
+                    const todayStart = Math.floor(new Date(todayUTC + 'T00:00:00Z').getTime() / 1000);
+                    const todayEnd = todayStart + 86399;
+                    
+                    matchesData = parsed.filter(match => {
+                        const matchDateUnix = match.date_unix;
+                        if (!matchDateUnix) return false;
+                        return matchDateUnix >= todayStart && matchDateUnix <= todayEnd;
+                    });
+                    displayMatches();
+                    displayMessage('Załadowano dane z cache', 'info');
+                } catch (e) {
+                    console.error('Błąd odczytu cache:', e);
+                }
+            }
+        });
+    </script>
+</body>
+</html>
+
