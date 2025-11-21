@@ -862,11 +862,10 @@
                 const analysis = item.analysis || {};
                 const odds = item.odds_over95 ?? analysis.odds_over95 ?? null;
                 const predictedProbability = calculatePredictedProbability(analysis);
-                const effectiveOdds = odds ? odds * 0.88 : null; // 12% podatek
-                const breakEven = effectiveOdds && effectiveOdds > 0 ? 1 / effectiveOdds : null;
-                const edge = (predictedProbability !== null && breakEven !== null)
-                    ? predictedProbability - breakEven
-                    : null;
+                // Obliczanie edge wyłączone - kursy nie są adekwatne do bukmachera użytkownika
+                const effectiveOdds = null; // Wyłączone
+                const breakEven = null; // Wyłączone
+                const edge = null; // Wyłączone - nie można obliczyć bez kursów
                 const leagueKey = normalizeLeagueKey(item.league || item.league_name || '');
                 const leagueStat = leagueStats[leagueKey];
 
@@ -874,19 +873,21 @@
                     reasons.push(`Brak konsensusu modeli (tylko ${consensusCount})`);
                 }
 
-                if (!odds || odds < settings.minOdds) {
-                    reasons.push(`Kurs ${odds ? odds.toFixed(2) : 'n/d'} < ${settings.minOdds}`);
-                }
+                // Sprawdzanie kursów wyłączone - kursy nie są adekwatne do bukmachera użytkownika
+                // if (!odds || odds < settings.minOdds) {
+                //     reasons.push(`Kurs ${odds ? odds.toFixed(2) : 'n/d'} < ${settings.minOdds}`);
+                // }
 
                 if (predictedProbability === null || predictedProbability < settings.minPredictedProbability) {
                     const probText = predictedProbability === null ? 'brak' : `${(predictedProbability * 100).toFixed(1)}%`;
                     reasons.push(`Prognoza ${probText} < ${(settings.minPredictedProbability * 100).toFixed(0)}%`);
                 }
 
-                if (edge === null || edge < settings.minEdge) {
-                    const edgeText = edge === null ? 'brak' : `${(edge * 100).toFixed(1)}%`;
-                    reasons.push(`Przewaga ${edgeText} < ${(settings.minEdge * 100).toFixed(1)}%`);
-                }
+                // Sprawdzanie przewagi (edge) wyłączone - wymaga kursów, które nie są adekwatne
+                // if (edge === null || edge < settings.minEdge) {
+                //     const edgeText = edge === null ? 'brak' : `${(edge * 100).toFixed(1)}%`;
+                //     reasons.push(`Przewaga ${edgeText} < ${(settings.minEdge * 100).toFixed(1)}%`);
+                // }
 
                 if (leagueStat && leagueStat.total >= settings.minLeagueSamples && leagueStat.winRate < settings.minLeagueWinRate) {
                     reasons.push(`Liga ${leagueKey}: ${(leagueStat.winRate * 100).toFixed(1)}% sukcesów z ${leagueStat.total} meczów`);
@@ -2308,6 +2309,10 @@ async function ensureTodayCache() {
                         }
                         
                         // Mecz kwalifikuje się jeśli ma zakwalifikowane modele (i nie jest to tylko Model 4)
+                        // Ustaw również analysis.qualified na true jeśli ma zakwalifikowane modele
+                        if (item.analysis) {
+                            item.analysis.qualified = true;
+                        }
                         return true;
                     });
                     
@@ -2417,14 +2422,24 @@ async function ensureTodayCache() {
                     allAnalyzedMatches.push(matchItem);
                     
                     // Oblicz zakwalifikowane modele
-                        const qualifiedModels = determineQualifiedModels(analysis.model_results);
-                        matchItem.qualified_models = qualifiedModels;
+                    const qualifiedModels = determineQualifiedModels(analysis.model_results);
+                    matchItem.qualified_models = qualifiedModels;
+                    
+                    // Ponownie sprawdź czy mecz kwalifikuje się na podstawie model_results
+                    // (analysis.qualified może być false w starym cache, ale modele mogą być spełnione)
+                    const actuallyQualified = qualifiedModels.length > 0 && 
+                        (qualifiedModels.length > 1 || qualifiedModels[0] !== 4);
                     
                     // Mecz kwalifikuje się jeśli:
-                    // 1. analysis.qualified jest true (spełnia podstawowe wymagania)
-                    // 2. I ma co najmniej jeden zakwalifikowany model
-                    // 3. I NIE jest to TYLKO Model 4
-                    if (analysis.qualified && qualifiedModels.length > 0) {
+                    // 1. analysis.qualified jest true (spełnia podstawowe wymagania) LUB
+                    // 2. Ma zakwalifikowane modele (i nie jest to TYLKO Model 4)
+                    if (analysis.qualified || actuallyQualified) {
+                        // Ustaw analysis.qualified na true jeśli modele są spełnione
+                        if (actuallyQualified && !analysis.qualified) {
+                            analysis.qualified = true;
+                            matchItem.analysis.qualified = true;
+                        }
+                        
                         // Wyklucz mecze z TYLKO Modelem 4 (muszą mieć co najmniej jeden inny model)
                         if (qualifiedModels.length === 1 && qualifiedModels[0] === 4) {
                             // Mecz spełnia tylko Model 4 - nie dodawaj do zakwalifikowanych
@@ -2446,43 +2461,7 @@ async function ensureTodayCache() {
                     return b.analysis.percent_sum - a.analysis.percent_sum;
                 });
                 
-                // Pobierz kursy Over 9.5 dla zakwalifikowanych meczów
-                if (analyzedMatches.length > 0) {
-                    displayMessage(`Pobieranie kursów dla ${analyzedMatches.length} zakwalifikowanych meczów...`, 'info');
-                    for (let i = 0; i < analyzedMatches.length; i++) {
-                        const item = analyzedMatches[i];
-                        const matchId = item.match.id;
-                        if (matchId) {
-                            try {
-                                const proxy = getProxy();
-                                let url;
-                                if (USE_PROXY) {
-                                    url = `${proxy}${BASE_URL}/match?key=${API_KEY}&match_id=${matchId}`;
-                                } else {
-                                    url = `${BASE_URL}/match?match_id=${matchId}`;
-                                }
-                                const response = await fetch(url);
-                                if (response.ok) {
-                                    const data = await response.json();
-                                    if (data.success && data.data) {
-                                        const oddsOver95 = data.data.odds_corners_over_95;
-                                        if (oddsOver95) {
-                                            item.odds_over95 = parseFloat(oddsOver95);
-                                            if (!item.analysis) {
-                                                item.analysis = {};
-                                            }
-                                            item.analysis.odds_over95 = item.odds_over95;
-                                        }
-                                    }
-                                }
-                                // Opóźnienie między requestami
-                                await new Promise(resolve => setTimeout(resolve, 300));
-                            } catch (error) {
-                                console.error(`Błąd pobierania kursu dla meczu ${matchId}:`, error);
-                            }
-                        }
-                    }
-                }
+                // Pobieranie kursów wyłączone - kursy nie są adekwatne do bukmachera użytkownika
 
                 const { filtered, rejected, summary } = applyAdvancedFilters(analyzedMatches, {
                     leagueStats: leaguePerformanceStats,
